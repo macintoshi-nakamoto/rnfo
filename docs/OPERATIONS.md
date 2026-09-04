@@ -55,7 +55,7 @@ correction is reversible.
 
 | Timer | When (UTC) | Targets |
 |---|---|---|
-| `rnfo-probe-full.timer` | 00:00, 06:00, 12:00, 18:00 | 2 817 URLs |
+| `rnfo-probe-full.timer` | 00:00, 06:00, 12:00, 18:00 | 2 824 URLs |
 | `rnfo-probe-controls.timer` | every 15 minutes | 10 controls |
 
 Both are `Persistent=true`, so a run missed while the machine was off fires on boot
@@ -65,6 +65,16 @@ Both use `AccuracySec=1s` with no randomised delay. This is deliberate and must 
 "tidied up": systemd's default one-minute accuracy window would scatter probes across
 it, and simultaneity between a Russian probe and its foreign control is the entire
 point of having a control.
+
+`OnCalendar` carries an explicit `UTC`, so probes fire at the same instant regardless
+of host timezone. `systemctl list-timers` renders that instant in local time, so the
+Dutch host prints `22:30 CEST` for the same slot the Moscow host prints as `20:30 UTC`.
+Same moment, different rendering; do not "fix" it.
+
+A workstation clock is not evidence. When checking whether a slot has fired, compare
+against `date -u` **on the probe**: the probes are NTP-disciplined and a desktop
+frequently is not. This one was 83 seconds fast on 2026-09-04, which is enough to make
+a slot look missed when it simply had not arrived.
 
 Run one by hand:
 

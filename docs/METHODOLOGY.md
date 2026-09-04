@@ -269,7 +269,7 @@ after a block would be at the same provider and would answer neither.
 
 ## 8. Load and politeness
 
-The `full` profile covers 2 817 unique URLs: the pinned Citizen Lab `global` and `ru`
+The `full` profile covers 2 824 unique URLs: the pinned Citizen Lab `global` and `ru`
 lists, ten connectivity controls, and our own endpoints. It runs four times a day per
 probe at fixed UTC slots, with at most twelve concurrent requests and a random delay
 of up to 250 ms before each.
