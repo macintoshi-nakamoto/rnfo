@@ -85,7 +85,8 @@ probes:
 
   - id: nl-lim-panel
     role: control
-    status: planned
+    status: active
+    since: 2026-09-04
     net: hosting
     country: NL
     region: Limburg
@@ -95,11 +96,25 @@ probes:
     uplink: vps
     consent: owner
     dedicated: false
+    clock: systemd-timesyncd
     notes: >
-      Candidate foreign control. NOT dedicated: this machine runs a production
-      service with real users. Acceptable for Tier 1, which is outbound HTTP
-      only and adds no attack surface; unacceptable for the Tier 3 responder,
-      which must be a clean address.
+      The foreign control for Tier 1, activated 2026-09-04 as a documented
+      deviation from the "probes are dedicated machines" rule. This machine
+      runs a production web service with real users. The deviation is
+      acceptable here and only here: the agent makes outbound HTTP requests
+      only, opens no listening port and adds no attack surface. It is NOT
+      acceptable for the Tier 3 responder, which must be a clean address in a
+      different autonomous system.
+
+      Two caveats for anyone reading the data. Runs from this probe finish in
+      minutes while a Russian run takes tens of minutes, because nothing times
+      out here; pairing is by run id and slot, and the per-row timestamps give
+      the skew. And if this host is ever renumbered, the vantage point changes
+      without an asn_changed event, because the new address would be in the
+      same AS200823 - so a renumbering must be recorded here by hand.
+
+      Clock is systemd-timesyncd, not chrony: adequate for Tier 1, must be
+      changed before any two-sided packet capture.
 
   - id: de-fra-clean
     role: responder

@@ -8,9 +8,10 @@ This is a **measurement** project. It observes and records how networks behave. 
 does not build, ship or document tools for evading network controls, and none are
 present in this repository. See [`docs/ETHICS.md`](docs/ETHICS.md).
 
-**Status: collecting.** First production data 2026-09-04 from one Russian probe.
-One foreign control is still missing, and until it exists nothing here is publishable
-— see [Open defects](#open-defects).
+**Status: collecting, with a control.** First production data 2026-09-04 from one
+Russian probe and one foreign control, firing on the same UTC schedule and sharing run
+ids. The control is not a dedicated machine and the foreign side is a single autonomous
+system, which bounds what can be claimed — see [Open defects](#open-defects).
 
 ---
 
@@ -128,16 +129,23 @@ Full detail in [`docs/OPERATIONS.md`](docs/OPERATIONS.md).
 
 Listed here rather than in an appendix, because they bound what the data can support.
 
-1. **No foreign control is running.** Every Russian measurement currently lacks its
-   simultaneous outside measurement. Nothing may be published until this is fixed.
-2. **The foreign machines are one network, not four.** All are in AS200823 and three
-   share a /24, so "does filtering follow the prefix or the AS" has a sample size of
-   one on the axis that matters. Fixing it requires one machine at a different
-   provider, not more machines at this one.
-3. **No dedicated foreign host, so Tier 2 and Tier 3 have not started.** A responder
-   on an address that already carries production traffic would measure that traffic,
-   not the experiment.
-4. **One Russian vantage point, on the less interesting network type.**
+1. **The foreign machines are one network, not four.** Every foreign host is in
+   AS200823 and three share a /24, so "does filtering follow the destination prefix or
+   the destination AS" has a sample size of one on the axis that matters. No number of
+   additional machines at this provider fixes it; it needs one machine elsewhere.
+2. **The foreign control is not a dedicated machine.** It runs a production web
+   service. Acceptable for Tier 1, which is outbound HTTP only, and recorded on the
+   probe's own registry entry so it is visible in the dataset. Not acceptable for the
+   responder.
+3. **Tier 2 and Tier 3 have not started**, for want of a clean foreign address. A
+   responder on a host that already carries the transports under test would measure
+   that traffic, not the experiment.
+4. **Runs are paired by slot, not synchronised.** A Russian run takes tens of minutes
+   because failures wait out their timeouts; the control finishes in two. Rows join on
+   `(run_id, url)` and the timestamps give the skew, which is fine for reachability and
+   not fine for anything at packet granularity.
+5. **One Russian vantage point, on the less interesting network type.** Hosting, not
+   residential.
 
 Full discussion in [`docs/METHODOLOGY.md`](docs/METHODOLOGY.md) §7 and §10.
 

@@ -99,9 +99,20 @@ measurement from outside it. A site can be unreachable because it is filtered, o
 because it is down, or because it blocks datacentre addresses, or because its
 certificate expired. Only the foreign control separates those.
 
-**This requirement is currently not met.** See section 7. It is the single largest
-open defect in the project as of 2026-09-04, and no result may be published until it
-is closed.
+Since 2026-09-04 a foreign control runs on the same UTC schedule as the Russian
+probe, with the same binary, the same target list and the same one-second accuracy
+window, so both land in the same slot and share a run id.
+
+Two properties of this control limit what it supports, and both are recorded on its
+registry entry rather than left for a reader to discover:
+
+- **It is not a dedicated machine.** It runs a production web service. This is a
+  documented deviation from the dedicated-probe rule, taken because the agent is
+  outbound HTTP only and opens no listening port. It does not extend to the responder.
+- **It is in AS200823, like every other foreign host available to the project.** So it
+  controls for "was the site up and serving" but not for "does this destination network
+  get treated differently", which is a separate question needing a separate provider.
+  See section 7.
 
 ### 4.2 The connectivity control set
 
@@ -241,11 +252,18 @@ the foreign control and the Tier 2/3 responder. Cost is in the region of four to
 euros a month, and it unblocks the SNI experiments, the volume-trigger experiments,
 and every Tier 3 question. Until it exists:
 
-- Tier 1 may run against a non-dedicated foreign host, because it is outbound HTTP
-  only and adds no listening surface. The deviation is recorded in `probes.yaml` on
-  the probe entry itself.
+- Tier 1 runs against a non-dedicated foreign host, because it is outbound HTTP only
+  and adds no listening surface. Done on 2026-09-04; the deviation is recorded in
+  `probes.yaml` on the probe entry itself so it travels with the data.
 - Tier 2 and Tier 3 do not start. A responder on a production VPN address would
   produce results that cannot be defended and could take the service down.
+
+A note on why the *panel* host being at low risk of blocking does not settle this. The
+clean machine is not wanted as insurance against the site being blocked; it is wanted
+because two experiments are impossible without it. The SNI experiment needs an address
+whose behaviour is not already determined by the traffic it carries, and the AS
+question needs a second autonomous system to compare against. A replacement bought
+after a block would be at the same provider and would answer neither.
 
 ---
 
@@ -281,9 +299,15 @@ endpoints is ever contacted. No enumeration, no range scanning, no port sweeps.
 
 ## 10. Known limitations
 
-1. No foreign control is running yet (section 7). Nothing may be published until it is.
+1. The foreign side is a single autonomous system (section 7), so the control
+   establishes that a site was serving but cannot establish that a destination network
+   is treated differently.
 2. One Russian vantage point, on a hosting network, which is the *less* interesting of
    the two network types.
+2a. Runs are paired by slot, not synchronised. On 2026-09-04 a Russian full run took
+   roughly forty minutes while the control took two, because only the Russian side
+   waits out timeouts. Rows join on `(run_id, url)` and the per-row timestamps give the
+   skew. Adequate for reachability, inadequate for anything at packet granularity.
 3. IPv4 only.
 4. HTTP/1.1 only.
 5. Tier 1 observes behaviour, not intent. Attribution of a reset to in-path injection
