@@ -8,10 +8,13 @@ This is a **measurement** project. It observes and records how networks behave. 
 does not build, ship or document tools for evading network controls, and none are
 present in this repository. See [`docs/ETHICS.md`](docs/ETHICS.md).
 
-**Status: collecting, with a control.** First production data 2026-09-04 from one
-Russian probe and one foreign control, firing on the same UTC schedule and sharing run
-ids. The control is not a dedicated machine and the foreign side is a single autonomous
-system, which bounds what can be claimed — see [Open defects](#open-defects).
+**Status: collecting, three vantage points, first paired results.** One Russian
+probe, two foreign controls in two autonomous systems, a responder, all firing on the
+same UTC schedule and sharing run ids. First paired slot: from a Moscow hosting network,
+**25.2 % of the standard test list fails only from Russia, 100 % reproducibly, 84 % of
+it as a silent drop during the TLS handshake.** And the second foreign host produced a
+finding of its own: Russian networks drop unsolicited TCP SYNs from its prefix while
+passing ICMP. Details and caveats in [`docs/METHODOLOGY.md`](docs/METHODOLOGY.md) §8.
 
 ---
 
@@ -129,23 +132,21 @@ Full detail in [`docs/OPERATIONS.md`](docs/OPERATIONS.md).
 
 Listed here rather than in an appendix, because they bound what the data can support.
 
-1. **The foreign machines are one network, not four.** Every foreign host is in
-   AS200823 and three share a /24, so "does filtering follow the destination prefix or
-   the destination AS" has a sample size of one on the axis that matters. No number of
-   additional machines at this provider fixes it; it needs one machine elsewhere.
-2. **The foreign control is not a dedicated machine.** It runs a production web
-   service. Acceptable for Tier 1, which is outbound HTTP only, and recorded on the
-   probe's own registry entry so it is visible in the dataset. Not acceptable for the
-   responder.
-3. **Tier 2 and Tier 3 have not started**, for want of a clean foreign address. A
-   responder on a host that already carries the transports under test would measure
-   that traffic, not the experiment.
+1. **One Russian vantage point, on the less interesting network type.** Hosting, not
+   residential. The home broadband and mobile probes are the ones that matter, and
+   both are still to be set up.
+2. **The AS comparison has a sample size of two**, and the second foreign host shares
+   an upstream with the Russian probe. Its failures toward Russian destinations (9.3 %
+   of the list) make it a subject rather than a control for those targets.
+3. **The primary control is not a dedicated machine.** It runs a production web
+   service; acceptable because the agent is outbound HTTP only, and recorded on the
+   probe's registry entry.
 4. **Runs are paired by slot, not synchronised.** A Russian run takes tens of minutes
-   because failures wait out their timeouts; the control finishes in two. Rows join on
-   `(run_id, url)` and the timestamps give the skew, which is fine for reachability and
-   not fine for anything at packet granularity.
-5. **One Russian vantage point, on the less interesting network type.** Hosting, not
-   residential.
+   because failures wait out their timeouts; a control finishes in two. Rows join on
+   `(run_id, url)` and timestamps give the skew — fine for reachability, not for
+   anything at packet granularity.
+5. **Tier 2 packet capture and Tier 3 transports have not started.** The responder is
+   up and the SNI experiment runs; TTL analysis and transport survivability do not yet.
 
 Full discussion in [`docs/METHODOLOGY.md`](docs/METHODOLOGY.md) §7 and §10.
 

@@ -160,13 +160,21 @@ func (s *Set) Order(runID string) {
 	s.Targets = append(ctrl, rest...)
 }
 
-// Controls returns how many targets in the set are controls.
-func (s *Set) Controls() int {
-	n := 0
+// IsIntlControl reports whether this is a control that must be reachable from
+// anywhere in the world. Domestic controls are not: a national portal may
+// legitimately refuse a foreign address.
+func (t Target) IsIntlControl() bool { return t.IsControl() && t.Scope == "intl" }
+
+// Controls returns how many targets in the set are controls, and how many of
+// those are international.
+func (s *Set) Controls() (total, intl int) {
 	for _, t := range s.Targets {
 		if t.IsControl() {
-			n++
+			total++
+			if t.IsIntlControl() {
+				intl++
+			}
 		}
 	}
-	return n
+	return total, intl
 }

@@ -14,6 +14,9 @@
 #   consent    owner  = machine belongs to the project
 #              recorded = third party, written consent on file (docs/consent/)
 #   dedicated  true only if the machine runs nothing but this project
+#   responder_cert_sha256 / responder_ports
+#              present on the host that runs the responder; a probe that sees
+#              a different certificate is not talking to us
 #
 # Addresses are deliberately absent. Probe addresses are not part of the
 # published dataset (see docs/ETHICS.md); connection details live in .env,
@@ -43,6 +46,15 @@ probes:
       at operators serving subscribers, so this probe is expected to see less
       filtering than a residential line. That difference is a result and must
       not be smoothed over by treating this probe as representative of Russia.
+
+      Transit note, observed 2026-09-05: AS203273 is single-homed through a
+      handful of upstreams that include AS216246, and both this host and the
+      Frankfurt host de-fra-vps carry hostnames under the same ptr.network
+      domain. The RIPE holders differ; the operational provider behind them
+      may not. Recorded so that anyone comparing this probe with de-fra-vps
+      knows the two ends are less independent than their ASNs suggest. The
+      route between them was checked and leaves the operator's network into
+      public transit (see de-fra-vps), so the path itself is representative.
 
   - id: ru-mow-home
     role: probe
@@ -78,9 +90,9 @@ probes:
       which must be calibrated before any TTL analysis in Tier 2.
 
   # ---------------------------------------------------------------------
-  # Foreign side. Nothing here is active yet, and the reason is a problem
-  # with the inventory rather than with the code. See docs/METHODOLOGY.md,
-  # "Vantage point independence".
+  # Foreign side. Two autonomous systems are now available, which is the
+  # minimum for the question "does filtering follow the prefix or the AS".
+  # See docs/METHODOLOGY.md, "Vantage point independence".
   # ---------------------------------------------------------------------
 
   - id: nl-lim-panel
@@ -98,13 +110,12 @@ probes:
     dedicated: false
     clock: systemd-timesyncd
     notes: >
-      The foreign control for Tier 1, activated 2026-09-04 as a documented
-      deviation from the "probes are dedicated machines" rule. This machine
-      runs a production web service with real users. The deviation is
-      acceptable here and only here: the agent makes outbound HTTP requests
-      only, opens no listening port and adds no attack surface. It is NOT
-      acceptable for the Tier 3 responder, which must be a clean address in a
-      different autonomous system.
+      The first foreign control for Tier 1, activated 2026-09-04 as a
+      documented deviation from the "probes are dedicated machines" rule.
+      This machine runs a production web service with real users. The
+      deviation is acceptable here and only here: the agent makes outbound
+      HTTP requests only, opens no listening port and adds no attack surface.
+      It must never host the responder.
 
       Two caveats for anyone reading the data. Runs from this probe finish in
       minutes while a Russian run takes tens of minutes, because nothing times
@@ -116,18 +127,43 @@ probes:
       Clock is systemd-timesyncd, not chrony: adequate for Tier 1, must be
       changed before any two-sided packet capture.
 
-  - id: de-fra-clean
-    role: responder
-    status: planned
+  - id: de-fra-vps
+    role: control
+    status: active
+    since: 2026-09-04
     net: hosting
     country: DE
-    asn: unknown
-    operator: to be chosen outside AS200823
+    region: Hesse
+    city: Frankfurt am Main
+    asn: AS210644
+    asn_name: AEZA GROUP LLC
+    operator: AEZA GROUP LLC
     uplink: vps
     consent: owner
     dedicated: true
+    clock: chrony
+    responder_cert_sha256: 80309fad7e5ccf3cfcb34febd490671fdbb84d5f54c1424a4b667f9aac670821
+    responder_ports: "443,8443,2053,9443 tls; 8080 raw"
     notes: >
-      Not yet bought. This is the missing piece of the design. It must be in a
-      different autonomous system from every other host we own, because the
-      question "does filtering follow the destination prefix or the
-      destination AS" cannot be answered with four hosts inside one AS.
+      The dedicated foreign host: second foreign control and the only machine
+      permitted to run the responder. Bought 2026-09-04 specifically to be in
+      an autonomous system other than AS200823, and placed in Frankfurt on
+      purpose - the project's AS200823 node is in the same city, so a
+      comparison between the two holds geography roughly constant and varies
+      only the destination network.
+
+      Route from ru-msk-vps, measured 2026-09-05: 11 hops here against 7 hops
+      to the AS200823 Frankfurt node, diverging at the fourth hop, both
+      through public transit. The asymmetry is a confound to keep in mind - a
+      difference in filtering between the two destinations may be an effect
+      of path length rather than of the autonomous system - and it is what the
+      TTL analysis in Tier 2 is for.
+
+      Shares an upstream (AS216246) and a hostname domain with ru-msk-vps; see
+      that entry. Domestic Russian controls are not expected to answer from
+      here: gosuslugi.ru timed out on first contact on 2026-09-04. Health is
+      therefore judged on the international controls alone (agent 0.2.0+).
+
+      The responder listens on the ports above and returns the certificate
+      with the fingerprint above for any server name it is asked for. Its
+      address is dialled directly by every probe as the "own" target set.

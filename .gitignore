@@ -26,3 +26,4 @@ docs/consent/*.pdf
 *.tmp
 *.bak
 .DS_Store
+data/logs/

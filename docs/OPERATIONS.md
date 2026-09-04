@@ -56,7 +56,7 @@ correction is reversible.
 | Timer | When (UTC) | Targets |
 |---|---|---|
 | `rnfo-probe-full.timer` | 00:00, 06:00, 12:00, 18:00 | 2 824 URLs |
-| `rnfo-probe-controls.timer` | every 15 minutes | 10 controls |
+| `rnfo-probe-controls.timer` | every 15 minutes | 10 controls + 4 own (responder ports) |
 
 Both are `Persistent=true`, so a run missed while the machine was off fires on boot
 and the gap appears in the data as a late run rather than as silence.
@@ -94,9 +94,17 @@ is compromised or seized cannot rewrite history.
 go build -o bin/rnfo-collect ./collector
 ./bin/rnfo-collect pull                # all active probes in probes.yaml
 ./bin/rnfo-collect pull -probe ru-msk-vps
+./bin/rnfo-collect pull -live          # also today's unsealed files, as live-*.jsonl (provisional)
 ./bin/rnfo-collect validate            # schema + registry check on data/
 ./bin/rnfo-collect stats               # rows, verdict distribution, day coverage
+./bin/rnfo-collect compare -slot 2026-09-05T00:00Z/full -subject ru-msk-vps -control nl-lim-panel
 ```
+
+`compare` is the analysis the design exists for: one slot, joined target by target.
+"Failed from subject only" is the only bucket attributable to the subject's network.
+"Failed from control only" is a warning about the control's own address, and if that
+bucket is large the control is not clean for those targets — see the de-fra-vps entry
+in `probes.yaml` for a live example.
 
 `pull` fetches only sealed days — a day file with a `.sha256` sidecar, meaning the
 probe has finished writing it — verifies the checksum, and **rejects** any file that
@@ -105,10 +113,12 @@ does not match rather than admitting unverifiable rows.
 `validate` exits non-zero if anything is wrong, so it belongs in CI before any
 publication.
 
-> **Not yet automated.** Collection runs from a workstation that is not always on.
-> Data accumulates safely on the probes for 90 days, so this is not urgent, but
-> "3+ probes writing data daily with zero manual intervention" by 2026-12-01 needs a
-> collector on a machine that stays up.
+**Automated on the workstation.** Windows Task Scheduler runs `tools/pull.cmd` daily
+at 03:30 local as task `RNFO daily pull`: pull, then validate, appending to
+`data/logs/pull.log`. Check it with `schtasks /Query /TN "RNFO daily pull"`; remove it
+with `schtasks /Delete /TN "RNFO daily pull" /F`. Data also accumulates on each probe
+for 90 days, so a workstation that is off for a week loses nothing. A collector on a
+machine that is always up is still the right long-term home; this is the bridge.
 
 ---
 
@@ -135,6 +145,10 @@ added without a rebuild.
 
 ## Troubleshooting
 
+**`controls_intl_*` is null in a run record.** The run was written by agent 0.1.0,
+before the international-only health rule. Its `healthy` was judged on all ten
+controls. Not an error; the `agent` field is there so this is unambiguous.
+
 **Unit failed with status 3.** Not a crash. Exit 3 means the connectivity controls
 failed, so the probe was off the network. Check the run record for that slot.
 
@@ -154,18 +168,36 @@ before Tier 2.
 
 ## Responder
 
-Built, **not deployed**. It must go on a machine that runs nothing else and sits
-outside AS200823 — see `METHODOLOGY.md` §7. Deploying it beside a production VPN
-service would produce results that cannot be defended and could take that service
-down.
+Deployed 2026-09-04 on `de-fra-vps`, the only dedicated foreign host. Certificate
+fingerprint and ports are in `probes.yaml`; address and token are in `.env`.
 
 ```bash
-RNFO_RESPONDER_TOKEN=<secret> ./bin/rnfo-responder \
-  -ports 443,8443,2053,9443 -raw-ports 8080 -names responder.example
+python tools/deploy_responder.py root@<host>        # install or upgrade; token from .env
+ssh root@<host> 'systemctl status rnfo-responder; ufw status'
 ```
 
-It prints its certificate fingerprint at startup. Record that fingerprint in
-`probes.yaml`: a probe that sees a different one is not talking to us.
+Every probe dials the responder on all four TLS ports in every controls run (the
+`own` list), so address-level reachability of our endpoint is measured continuously
+and a block of the address shows up within fifteen minutes.
+
+### The SNI experiment
+
+Same address, ten server names, five interleaved rounds, roughly four minutes. Run
+it on the Russian probe and on a foreign control **with the same `-run-id`** so the
+rows join. The simplest way is a tiny wrapper on each host:
+
+```bash
+RID="$(date -u +%Y-%m-%dT%H):00Z/sni"
+cat > /root/sni.sh <<EOF
+#!/bin/sh
+exec runuser -u rnfo -- env \$(grep -v '^#' /etc/rnfo/probe.env | xargs) \
+  /opt/rnfo/bin/rnfo-probe -experiment sni -responder <responder-ip> -repeats 5 -run-id '$RID'
+EOF
+chmod +x /root/sni.sh && nohup /root/sni.sh > /root/sni.log 2>&1 &
+```
+
+It prints a per-name summary at the end and writes rows with `list: sni`. Names come
+only from the pinned lists plus our own; no packet reaches the named hosts.
 
 Endpoints:
 

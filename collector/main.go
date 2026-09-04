@@ -41,6 +41,8 @@ func main() {
 		err = cmdPull(os.Args[2:])
 	case "stats":
 		err = cmdStats(os.Args[2:])
+	case "compare":
+		err = cmdCompare(os.Args[2:])
 	default:
 		usage()
 	}
@@ -54,8 +56,13 @@ func usage() {
 	fmt.Fprintln(os.Stderr, `rnfo-collect <validate|pull|stats> [args]
 
   validate [path...]   verify every record against the schema and probes.yaml
-  pull [-probe id]     fetch sealed day files from probes listed in .env
-  stats [path...]      count rows, verdicts and probe coverage`)
+  pull [-probe id] [-live]
+                       fetch sealed day files from probes listed in .env;
+                       -live also fetches today's unsealed files as provisional
+  stats [path...]      count rows, verdicts and probe coverage
+  compare -slot <run_id> -subject <probe> -control <probe> [path...]
+                       join one slot target by target: what failed only from
+                       the subject is what its network did`)
 	os.Exit(2)
 }
 
@@ -224,9 +231,15 @@ func validateEvent(m map[string]any, report func(string)) {
 
 func cmdPull(args []string) error {
 	only := ""
+	live := false
 	for i := 0; i < len(args); i++ {
-		if args[i] == "-probe" && i+1 < len(args) {
-			only = args[i+1]
+		switch args[i] {
+		case "-probe":
+			if i+1 < len(args) {
+				only = args[i+1]
+			}
+		case "-live":
+			live = true
 		}
 	}
 	env, err := loadEnv(".env")
@@ -300,6 +313,24 @@ func cmdPull(args []string) error {
 				}
 				fmt.Printf("    %s/%s  verified\n", stream, name)
 				pulled++
+			}
+			if live {
+				// Today's file is still being written and has no checksum. It
+				// is fetched for analysis only, named so it cannot be mistaken
+				// for an archived day, and overwritten on every pull. When the
+				// day is sealed the verified copy replaces it.
+				today, err := sshOut(key, host, "date -u +%F")
+				if err != nil {
+					continue
+				}
+				name := strings.TrimSpace(today) + ".jsonl"
+				dst := filepath.Join(archive, p.ID, stream, "live-"+name)
+				if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+					return err
+				}
+				if err := scp(key, host, remote+"/"+name, dst); err == nil {
+					fmt.Printf("    %s/live-%s  provisional\n", stream, name)
+				}
 			}
 		}
 	}

@@ -21,6 +21,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -57,6 +58,10 @@ func main() {
 		dataDir  = flag.String("data", env("RNFO_DATA_DIR", "/var/lib/rnfo/data"), "data directory")
 		stateDir = flag.String("state", env("RNFO_STATE_DIR", "/var/lib/rnfo/state"), "state directory, never shipped")
 		ownFile  = flag.String("own", env("RNFO_OWN_TARGETS", ""), "optional CSV of our own endpoints")
+		exper    = flag.String("experiment", "", "run a one-off experiment instead of a scheduled measurement: sni")
+		respIP   = flag.String("responder", env("RNFO_RESPONDER_IP", ""), "responder address for -experiment")
+		respPort = flag.String("responder-port", env("RNFO_RESPONDER_PORT", "443"), "responder port for -experiment")
+		repeats  = flag.Int("repeats", 5, "rounds per name in -experiment sni")
 		family   = flag.String("family", env("RNFO_IP_FAMILY", "v4"), "address family to measure over: v4, v6 or auto")
 		conc     = flag.Int("concurrency", envInt("RNFO_CONCURRENCY", 12), "parallel measurements")
 		keepDays = flag.Int("keep-days", envInt("RNFO_KEEP_DAYS", 90), "days of local data to retain")
@@ -99,6 +104,22 @@ func main() {
 	// Identity first: a run whose network we cannot name is still worth
 	// having, but the ambiguity must be recorded rather than guessed at.
 	id, prev, fresh := identity.Resolve(ctx, *stateDir)
+
+	if *exper != "" {
+		if *exper != "sni" {
+			log.Fatalf("unknown experiment %q", *exper)
+		}
+		if *respIP == "" {
+			log.Fatal("-responder <ip> is required for -experiment sni")
+		}
+		runSNI(ctx, sniArgs{
+			probeID: *probeID, netType: *netType, family: *family,
+			dataDir: *dataDir, ip: *respIP, port: *respPort,
+			repeats: *repeats, started: started, runID: *runID,
+			asn: id.ASN, country: id.Country, region: id.Region,
+		})
+		return
+	}
 
 	own, err := loadOwn(*ownFile)
 	if err != nil {
@@ -153,11 +174,12 @@ func main() {
 	}
 
 	var (
-		mu        sync.Mutex
-		byVerdict = map[string]int{}
-		rows, ok  int
-		ctrlOK    int
-		failed    []targets.Target
+		mu         sync.Mutex
+		byVerdict  = map[string]int{}
+		rows, ok   int
+		ctrlOK     int
+		ctrlIntlOK int
+		failed     []targets.Target
 	)
 	record := func(m *schema.Measurement, t targets.Target) {
 		mu.Lock()
@@ -167,6 +189,9 @@ func main() {
 			ok++
 			if t.IsControl() {
 				ctrlOK++
+				if t.IsIntlControl() {
+					ctrlIntlOK++
+				}
 			}
 		} else if m.Attempt == 1 {
 			failed = append(failed, t)
@@ -202,7 +227,9 @@ func main() {
 		wg.Wait()
 	}
 
-	log.Printf("run %s: %d targets (%d controls), probe %s on %s", slot, len(set.Targets), set.Controls(), *probeID, id)
+	ctrlTotal, ctrlIntlTotal := set.Controls()
+	log.Printf("run %s: %d targets (%d controls, %d of them international), probe %s on %s",
+		slot, len(set.Targets), ctrlTotal, ctrlIntlTotal, *probeID, id)
 	measure(set.Targets, 1)
 
 	// Second pass: a single confirmation retry, only for what failed, and only
@@ -216,8 +243,10 @@ func main() {
 	}
 
 	finished := time.Now().UTC()
-	ctrlTotal := set.Controls()
-	healthy := ctrlTotal == 0 || float64(ctrlOK) >= 0.5*float64(ctrlTotal)
+	// Judged on the international controls: those must answer any probe on the
+	// planet, so failing them means this probe had no usable network and the
+	// run says nothing about filtering.
+	healthy := ctrlIntlTotal == 0 || float64(ctrlIntlOK) >= 0.5*float64(ctrlIntlTotal)
 	run := schema.Run{
 		Schema: schema.Version, Kind: "run", RunID: slot,
 		Probe: *probeID, Net: *netType,
@@ -228,7 +257,9 @@ func main() {
 		DurationS:  finished.Sub(started).Seconds(),
 		Targets:    len(set.Targets), Rows: rows, OK: ok, Failed: rows - ok,
 		ByVerdict:     byVerdict,
-		ControlsTotal: ctrlTotal, ControlsOK: ctrlOK, Healthy: healthy,
+		ControlsTotal: ctrlTotal, ControlsOK: ctrlOK,
+		ControlsIntlTotal: ctrlIntlTotal, ControlsIntlOK: ctrlIntlOK,
+		Healthy:      healthy,
 		ListManifest: set.Manifest,
 	}
 	if err := rw.Write(run); err != nil {
@@ -242,12 +273,113 @@ func main() {
 		log.Printf("pruned %d file(s) older than %d days", n, *keepDays)
 	}
 
-	log.Printf("run %s done in %.0fs: %d rows, %d ok, %d failed, %d retried, controls %d/%d, healthy=%v",
-		slot, run.DurationS, rows, ok, run.Failed, retried, ctrlOK, ctrlTotal, healthy)
+	log.Printf("run %s done in %.0fs: %d rows, %d ok, %d failed, %d retried, controls %d/%d (intl %d/%d), healthy=%v",
+		slot, run.DurationS, rows, ok, run.Failed, retried, ctrlOK, ctrlTotal, ctrlIntlOK, ctrlIntlTotal, healthy)
 	if !healthy {
 		// Exit non-zero so systemd marks the unit failed and the outage is
 		// visible in the journal as well as in the data.
 		os.Exit(3)
+	}
+}
+
+type sniArgs struct {
+	probeID, netType, family string
+	dataDir, ip, port        string
+	runID                    string
+	repeats                  int
+	started                  time.Time
+	asn, country, region     string
+}
+
+// runSNI drives the same-address-different-name experiment and writes its rows
+// into the ordinary measurement stream, tagged list "sni".
+//
+// The run id is the wall-clock minute rather than a six-hour slot: this is a
+// manually driven experiment, and two probes running it are expected to be
+// started together by hand. Pass the same -run-id on both to force a join.
+func runSNI(ctx context.Context, a sniArgs) {
+	mw, err := jsonl.New(a.dataDir, "measurements")
+	if err != nil {
+		log.Fatalf("open measurements: %v", err)
+	}
+	defer mw.Close()
+	rw, err := jsonl.New(a.dataDir, "runs")
+	if err != nil {
+		log.Fatalf("open runs: %v", err)
+	}
+	defer rw.Close()
+
+	// Truncated to fifteen minutes so two probes started by hand within the
+	// same quarter hour share an id and their rows join. -run-id overrides it
+	// when an exact pairing is wanted.
+	runID := a.runID
+	if runID == "" {
+		runID = a.started.Truncate(15*time.Minute).Format("2006-01-02T15:04Z") + "/sni"
+	}
+	opts := tests.DefaultOptions()
+	opts.Family = a.family
+
+	log.Printf("run %s: sni experiment against %s:%s, %d names x %d rounds, probe %s",
+		runID, a.ip, a.port, len(tests.DefaultSNITrials), a.repeats, a.probeID)
+
+	rows := tests.SNIExperiment(ctx, a.ip, a.port, a.repeats, tests.DefaultSNITrials, opts)
+
+	byVerdict := map[string]int{}
+	ok := 0
+	for _, m := range rows {
+		m.RunID = runID
+		m.TS = time.Now().UTC().Format("2006-01-02T15:04:05.000Z")
+		m.Probe, m.Net = a.probeID, a.netType
+		m.ASN, m.Country, m.Region = a.asn, a.country, a.region
+		m.Profile = "sni"
+		byVerdict[m.Verdict]++
+		if m.Verdict == classify.VOK {
+			ok++
+		}
+		if err := mw.Write(m); err != nil {
+			log.Printf("write row: %v", err)
+		}
+	}
+
+	finished := time.Now().UTC()
+	_ = rw.Write(schema.Run{
+		Schema: schema.Version, Kind: "run", RunID: runID,
+		Probe: a.probeID, Net: a.netType,
+		ASN: a.asn, Country: a.country, Region: a.region,
+		Agent: schema.AgentVersion, Profile: "sni",
+		StartedAt:  a.started.Format("2006-01-02T15:04:05.000Z"),
+		FinishedAt: finished.Format("2006-01-02T15:04:05.000Z"),
+		DurationS:  finished.Sub(a.started).Seconds(),
+		Targets:    len(tests.DefaultSNITrials), Rows: len(rows), OK: ok, Failed: len(rows) - ok,
+		ByVerdict: byVerdict,
+		// No connectivity controls in this experiment: it targets a single
+		// address we own, so a control set measuring other hosts would say
+		// nothing about whether this particular tuple was reachable.
+		Healthy: true,
+	})
+
+	// A compact summary on stdout, because this experiment is read by a human
+	// the moment it finishes, not only from the archive.
+	log.Printf("run %s done in %.0fs", runID, finished.Sub(a.started).Seconds())
+	agg := map[string]map[string]int{}
+	for _, m := range rows {
+		if agg[m.Target] == nil {
+			agg[m.Target] = map[string]int{}
+		}
+		agg[m.Target][m.Verdict]++
+	}
+	names := make([]string, 0, len(agg))
+	for n := range agg {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	for _, n := range names {
+		var parts []string
+		for v, c := range agg[n] {
+			parts = append(parts, fmt.Sprintf("%s=%d", v, c))
+		}
+		sort.Strings(parts)
+		fmt.Printf("%-26s %s\n", n, strings.Join(parts, " "))
 	}
 }
 

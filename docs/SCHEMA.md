@@ -30,6 +30,11 @@ not match, so an admitted day is provably the day the probe wrote.
 
 Archived by the collector under `data/<probe-id>/…` with the sidecars preserved.
 
+`rnfo-collect pull -live` additionally fetches today's still-growing file as
+`live-YYYY-MM-DD.jsonl`, with no checksum. Those files are provisional: they are
+overwritten on every pull and are replaced by the verified copy once the day is
+sealed. Never cite a number from a `live-` file as final.
+
 ---
 
 ## Measurement record
@@ -48,17 +53,17 @@ One target, from one probe, at one moment.
 | `asn` | string | as observed, e.g. `AS203273 NetCrafters OU` |
 | `country`, `region` | string | probe location; never an address |
 | `agent` | string | `rnfo-probe/0.1.0` |
-| `profile` | string | `full` or `controls` |
+| `profile` | string | `full`, `controls`, or `sni` |
 
 ### Target
 
 | Field | Type | Notes |
 |---|---|---|
-| `list` | string | `citizenlab-global`, `citizenlab-ru`, `controls`, `own` |
-| `category` | string | Citizen Lab category code, e.g. `NEWS`, `HUMR`; `CTRL` for controls |
+| `list` | string | `citizenlab-global`, `citizenlab-ru`, `controls`, `own` (our responder, one row per port), `sni` (the same-address-different-name experiment) |
+| `category` | string | Citizen Lab category code, e.g. `NEWS`, `HUMR`. Controls carry `CTRL-RU` or `CTRL-INTL` (agent 0.2.0+; `CTRL` before). Own targets carry `OWN-RESPONDER`. `sni` rows carry the trial class: `own`, `none`, `neutral`, `blocked_observed` |
 | `target` | string | hostname |
 | `url` | string | URL as it appears in the list |
-| `attempt` | int | `1` first try, `2` confirmation retry after a failure |
+| `attempt` | int | `1` first try, `2` confirmation retry after a failure. In `sni` rows this is the round number, 1–5 |
 
 ### Resolution
 
@@ -171,8 +176,9 @@ Written once per run into `data/runs/`. Distinguished by `"kind": "run"`.
 | `started_at`, `finished_at`, `duration_s` | wall clock |
 | `targets`, `rows`, `ok`, `failed` | counts; `rows` exceeds `targets` when retries ran |
 | `by_verdict` | verdict histogram |
-| `controls_total`, `controls_ok` | connectivity control outcome |
-| `healthy` | false when half or more of the controls failed — **analysis must discard the run's measurements**, the probe was off the network |
+| `controls_total`, `controls_ok` | all connectivity controls, domestic and international |
+| `controls_intl_total`, `controls_intl_ok` | the international subset (agent 0.2.0+) |
+| `healthy` | **agent 0.2.0+:** false when half or more of the *international* controls failed. **agent 0.1.0:** judged on all controls. Either way: **analysis must discard the run's measurements**, the probe had no usable network. The `agent` field says which rule applied |
 | `list_manifest` | list name → SHA-256 of the file used, so any row traces to its exact target set |
 
 The run record is what makes downtime data rather than absence. A slot with no
@@ -197,3 +203,4 @@ Written into `data/runs/`. Distinguished by `"kind": "event"`.
 | Version | Date | Change |
 |---|---|---|
 | v1 | 2026-09-04 | Initial schema. |
+| v1 (agent 0.2.0) | 2026-09-04 | No field meaning changed. Added `controls_intl_total`/`controls_intl_ok`; `healthy` is now computed from international controls only, because a domestic Russian control (`gosuslugi.ru`) is not obliged to answer a foreign probe and did not. Control categories became `CTRL-RU`/`CTRL-INTL`. New `list` values `own` and `sni`, new `profile` value `sni`. |

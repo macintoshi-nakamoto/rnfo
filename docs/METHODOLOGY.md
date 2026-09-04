@@ -99,20 +99,29 @@ measurement from outside it. A site can be unreachable because it is filtered, o
 because it is down, or because it blocks datacentre addresses, or because its
 certificate expired. Only the foreign control separates those.
 
-Since 2026-09-04 a foreign control runs on the same UTC schedule as the Russian
+Since 2026-09-04 two foreign controls run on the same UTC schedule as the Russian
 probe, with the same binary, the same target list and the same one-second accuracy
-window, so both land in the same slot and share a run id.
+window, so all three land in the same slot and share a run id.
 
-Two properties of this control limit what it supports, and both are recorded on its
-registry entry rather than left for a reader to discover:
+A control is only as good as its own reachability, and that is measured rather than
+assumed: in every paired comparison the bucket "failed from the control only" is
+reported, and it is the control's cleanliness score. On the first paired slot:
 
-- **It is not a dedicated machine.** It runs a production web service. This is a
-  documented deviation from the dedicated-probe rule, taken because the agent is
-  outbound HTTP only and opens no listening port. It does not extend to the responder.
-- **It is in AS200823, like every other foreign host available to the project.** So it
-  controls for "was the site up and serving" but not for "does this destination network
-  get treated differently", which is a separate question needing a separate provider.
-  See section 7.
+| Control | AS | Dedicated | Failed from control only |
+|---|---|---|---|
+| `nl-lim-panel` | AS200823 | no | 7 of 2 824 (0.2 %) |
+| `de-fra-vps` | AS210644 | yes | 262 of 2 824 (9.3 %) — almost all Russian-hosted targets |
+
+So the two controls have different jobs. `nl-lim-panel` is the primary control for
+every target. `de-fra-vps` is a valid control for the international list only, and for
+Russian-hosted targets it is not a control at all but a *subject*: its failures toward
+Russia are a finding (section 8), not a baseline. Both roles are written on the
+registry entries.
+
+`nl-lim-panel` is not a dedicated machine; it runs a production web service. That is a
+documented deviation from the dedicated-probe rule, taken because the agent is outbound
+HTTP only and opens no listening port. It does not extend to the responder, which lives
+only on `de-fra-vps`.
 
 ### 4.2 The connectivity control set
 
@@ -245,29 +254,113 @@ and a dataset field that says "PL" because an invoice said so is a fabricated
 measurement. Country is recorded as observed, with the disagreement documented, or
 the machine is not used for any claim that depends on location.
 
-### What closing this requires
+### What was done about it (2026-09-04)
 
-One dedicated VPS at a provider outside AS200823, with nothing else on it. It becomes
-the foreign control and the Tier 2/3 responder. Cost is in the region of four to five
-euros a month, and it unblocks the SNI experiments, the volume-trigger experiments,
-and every Tier 3 question. Until it exists:
+A dedicated VPS was bought in **AS210644**, in Frankfurt — the same city as the
+project's AS200823 node, so that a comparison between the two destinations holds
+geography roughly constant and varies the network. It carries nothing but the agent and
+the responder. This closes the "no clean host" problem and gives the AS axis a sample
+size of two, which is the minimum at which the question exists.
 
-- Tier 1 runs against a non-dedicated foreign host, because it is outbound HTTP only
-  and adds no listening surface. Done on 2026-09-04; the deviation is recorded in
-  `probes.yaml` on the probe entry itself so it travels with the data.
-- Tier 2 and Tier 3 do not start. A responder on a production VPN address would
-  produce results that cannot be defended and could take the service down.
+Three things about it are recorded so nobody over-reads the comparison:
 
-A note on why the *panel* host being at low risk of blocking does not settle this. The
-clean machine is not wanted as insurance against the site being blocked; it is wanted
-because two experiments are impossible without it. The SNI experiment needs an address
-whose behaviour is not already determined by the traffic it carries, and the AS
-question needs a second autonomous system to compare against. A replacement bought
-after a block would be at the same provider and would answer neither.
+- **The two ends are less independent than their ASNs suggest.** The Moscow probe's
+  AS203273 and the Frankfurt host's AS210644 share an upstream, AS216246, and both
+  carry hostnames under the same `ptr.network` domain. The RIPE holders differ; the
+  operating provider behind them may not. This does not affect the destination-AS
+  comparison (AS210644 versus AS200823, both in Frankfurt, are genuinely different
+  operators), but it does mean Moscow-to-Frankfurt experiments run between two hosts
+  that may share a provider.
+- **The paths differ in length.** From Moscow, 11 hops to the AS210644 host against 7
+  to the AS200823 host, diverging at the fourth hop, both through public transit. A
+  difference in filtering between the two destinations may therefore be a path effect
+  rather than an AS effect. The TTL analysis in Tier 2 is what separates those.
+- **The new host is not a clean control for Russian destinations**, and the reason is
+  itself the first result of the AS comparison: see section 8.
 
 ---
 
-## 8. Load and politeness
+## 8. First controlled results — slot 2026-09-04T18:00Z
+
+Provisional: from `live-` files, one slot, one Russian vantage point on a hosting
+network. Reported here because the methodology should be judged against what it
+actually produces, not to make claims about Russia.
+
+### 8.1 Russia versus the primary control
+
+2 824 targets paired between `ru-msk-vps` (Moscow, AS203273) and `nl-lim-panel`
+(Netherlands, AS200823), zero unpaired.
+
+| Bucket | Targets | Share |
+|---|---|---|
+| ok from both | 1 950 | 69.1 % |
+| **failed from Moscow only** | **712** | **25.2 %** |
+| failed from both | 155 | 5.5 % |
+| failed from the control only | 7 | 0.2 % |
+
+The 712 Moscow-only failures are the only ones attributable to the Russian network.
+Every one of them was retried three seconds later and failed again: **100 % reproduced**.
+By mechanism: `tls_timeout` 599 (84 %), `connect_timeout` 43, `request_timeout` 30,
+`tls_reset` 17. By list: 434 from the `ru` list (40 % of it), 278 from `global`. By
+category: NEWS 318, ANON 63, HUMR 37, GRP 36, HOST 32, LGBT 32.
+
+What this does and does not say. It says that from one Russian hosting network, a
+quarter of the standard test list is unreachable in a way that reproduces immediately
+and is overwhelmingly a silent drop during the TLS handshake rather than an injected
+reset. It does not say this is representative of Russia — hosting is not eyeball — and
+it does not say the drop is name-based rather than address-based; that is what the SNI
+experiment below is for.
+
+### 8.2 The second autonomous system, and an inbound finding
+
+The same slot paired against `de-fra-vps` (Frankfurt, AS210644) gives 705 Moscow-only
+failures — consistent with the 712 above — but **262 targets failed only from
+Frankfurt**, against 7 for the Dutch control. Pairing the two foreign hosts directly:
+266 targets fail from AS210644 and succeed from AS200823, 260 of them `connect_timeout`,
+241 of them on the Russian list.
+
+Direct tests from the Frankfurt host toward the Moscow probe, which the project
+controls and whose firewall accepts port 22 from anywhere:
+
+| From AS210644 to | Result |
+|---|---|
+| Moscow probe, ICMP | answers, 38 ms |
+| Moscow probe, TCP SYN to 22 | dropped, timeout |
+| three Russian sites from the list, TCP 443 | dropped, timeout |
+| Dutch AS200823 host, TCP SYN to 22 | answers |
+| *reverse:* Moscow probe to Frankfurt host, TCP 443 | answers (the SNI experiment ran over it) |
+
+The failures spread across 168 distinct /16 destination networks, with the ten largest
+holding only 26 % of them. That is not the signature of individual sites blocklisting
+a provider; that would cluster. It is the signature of something on the path dropping
+**unsolicited inbound TCP SYNs from this source prefix toward Russian destinations**,
+while letting ICMP and the SYN-ACKs of Russian-initiated connections through. That is a
+stateful, direction-aware filter, and it is exactly the "whole hosting prefixes blocked"
+behaviour the brief asked to be tested.
+
+What it does not prove. The alternative is an egress policy at the source provider's
+transit toward Russia, TCP-only. Two checks would separate them and are not yet done:
+the same test from a third foreign AS, and a look at which Russian destination
+networks let the SYN through (some do — 5 of 9 targets in `95.163.0.0/16` answered),
+since per-operator variation is a Russian-side signature and a uniform failure is a
+source-side one.
+
+Consequence for the design: `de-fra-vps` is a valid control for the international list
+and a subject, not a control, for Russian-hosted targets. `nl-lim-panel` remains the
+primary control.
+
+### 8.3 Same address, different names
+
+The responder accepts any server name and returns the same certificate. From the Dutch
+control, all ten names × five rounds completed (50/50 `ok`): outside Russia the name
+does not matter, which is the baseline the experiment needs. The Moscow half of the
+same run id is recorded in the data under `list: sni`; its per-name outcome is the
+first direct test of whether the TLS-stage failures in 8.1 key on the name or on the
+address. *(Result to be entered here from the archived rows.)*
+
+---
+
+## 9. Load and politeness
 
 The `full` profile covers 2 824 unique URLs: the pinned Citizen Lab `global` and `ru`
 lists, ten connectivity controls, and our own endpoints. It runs four times a day per
@@ -282,7 +375,7 @@ endpoints is ever contacted. No enumeration, no range scanning, no port sweeps.
 
 ---
 
-## 9. Reproducibility
+## 10. Reproducibility
 
 - The target lists are compiled into the agent binary. The binary that produced a row
   fully determines which targets were measured, and a list refresh is a rebuild and a
@@ -297,11 +390,11 @@ endpoints is ever contacted. No enumeration, no range scanning, no port sweeps.
 
 ---
 
-## 10. Known limitations
+## 11. Known limitations
 
-1. The foreign side is a single autonomous system (section 7), so the control
-   establishes that a site was serving but cannot establish that a destination network
-   is treated differently.
+1. The foreign side is two autonomous systems, and one of them is not a clean control
+   for Russian destinations (sections 7 and 8.2). The AS comparison has a sample size
+   of two and shares an upstream between the Russian probe and one foreign host.
 2. One Russian vantage point, on a hosting network, which is the *less* interesting of
    the two network types.
 2a. Runs are paired by slot, not synchronised. On 2026-09-04 a Russian full run took
@@ -315,6 +408,9 @@ endpoints is ever contacted. No enumeration, no range scanning, no port sweeps.
 6. The identity lookup depends on two third-party geolocation providers. When both are
    unreachable the run continues on a cached identity and records an
    `identity_unknown` event; the ASN in those rows is stale by up to three hours.
-7. Clock discipline is verified but not yet monitored. `chrony` on the Moscow probe
+7. The SNI experiment writes its rows only when the whole run completes; a run killed
+   halfway leaves nothing. The scheduled measurements stream rows as they finish and
+   do not have this weakness.
+8. Clock discipline is verified but not yet monitored. `chrony` on the Moscow probe
    reported an offset of −1.2 ms on 2026-09-04, which is fine for Tier 1 and adequate
    for Tier 2, but there is no alert if it drifts.

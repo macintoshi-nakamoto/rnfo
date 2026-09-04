@@ -24,6 +24,37 @@ import time
 import paramiko
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+RESPONDER_TLS_PORTS = ("443", "8443", "2053", "9443")
+
+
+def load_env():
+    """Read .env (git-ignored). Only the keys the deploy needs."""
+    out = {}
+    p = os.path.join(REPO, ".env")
+    if not os.path.exists(p):
+        return out
+    for line in open(p, encoding="utf-8"):
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        k, v = line.split("=", 1)
+        out[k.strip()] = v.strip().strip("\"'")
+    return out
+
+
+def own_targets_csv(responder_ip: str) -> str:
+    """Our own endpoints as a Citizen-Lab-shaped CSV.
+
+    One row per responder port, dialled by address, so Tier 1 records
+    continuously whether our own address answers on each port. Blocking of
+    the address itself shows up here before any experiment is run.
+    """
+    rows = ["url,category_code,category_description,date_added,source,notes"]
+    for port in RESPONDER_TLS_PORTS:
+        suffix = "" if port == "443" else f":{port}"
+        rows.append(f"https://{responder_ip}{suffix}/v1/health,OWN-RESPONDER,Own responder port {port},2026-09-04,rnfo,")
+    return "\n".join(rows) + "\n"
+
 FILES = [
     "rnfo-probe@.service",
     "rnfo-probe-full.timer",
@@ -135,6 +166,17 @@ def main() -> None:
         run(c, "install -d -m 700 /root/.ssh && touch /root/.ssh/authorized_keys && chmod 600 /root/.ssh/authorized_keys")
         run(c, f"grep -qF '{key}' /root/.ssh/authorized_keys || echo '{key}' >> /root/.ssh/authorized_keys")
         print("==> ssh key present")
+
+    env = load_env()
+    if env.get("RNFO_RESPONDER_IP"):
+        csv = own_targets_csv(env["RNFO_RESPONDER_IP"])
+        run(c, "install -d -m 0755 /etc/rnfo")
+        sftp = c.open_sftp()
+        with sftp.file("/etc/rnfo/own.csv", "w") as f:
+            f.write(csv)
+        sftp.close()
+        run(c, "chmod 0644 /etc/rnfo/own.csv")
+        print(f"==> own targets: responder {env['RNFO_RESPONDER_IP']} on {len(RESPONDER_TLS_PORTS)} ports")
 
     run(c, f"bash {remote}/install.sh {a.probe_id} {a.net}")
     run(c, f"rm -rf {remote}")

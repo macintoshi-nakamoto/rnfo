@@ -10,7 +10,7 @@ package schema
 const Version = "v1"
 
 // AgentVersion identifies the binary that produced a record.
-const AgentVersion = "rnfo-probe/0.1.0"
+const AgentVersion = "rnfo-probe/0.2.0"
 
 // Network types a probe can sit on. "hosting" is a datacentre uplink,
 // "eyeball" is a residential subscriber line, "mobile" is a cellular carrier.
@@ -147,9 +147,21 @@ type Run struct {
 	// them fail, the probe lost connectivity and the rest of the run says
 	// nothing about filtering. Analysis must discard such runs, so the counts
 	// are recorded rather than inferred later.
-	ControlsTotal int  `json:"controls_total"`
-	ControlsOK    int  `json:"controls_ok"`
-	Healthy       bool `json:"healthy"`
+	ControlsTotal int `json:"controls_total"`
+	ControlsOK    int `json:"controls_ok"`
+
+	// Health is judged on the international controls only. A domestic Russian
+	// control is not obliged to answer a foreign probe - gosuslugi.ru times out
+	// from Frankfurt - so counting it would mark a healthy foreign run as an
+	// outage. Domestic controls stay in the data because they distinguish "the
+	// local link is down" from "the international link is down"; they simply do
+	// not gate the run.
+	//
+	// From rnfo-probe/0.2.0 onwards. Runs written by 0.1.0 computed healthy over
+	// all controls; the agent field on every record says which rule applied.
+	ControlsIntlTotal int  `json:"controls_intl_total"`
+	ControlsIntlOK    int  `json:"controls_intl_ok"`
+	Healthy           bool `json:"healthy"`
 
 	ListManifest map[string]string `json:"list_manifest"` // list file -> sha256, so a row can always be traced to the exact target set
 }

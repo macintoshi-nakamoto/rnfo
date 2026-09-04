@@ -27,6 +27,10 @@ type Probe struct {
 	Dedicated bool   `yaml:"dedicated"`
 	Clock     string `yaml:"clock"`
 	Notes     string `yaml:"notes"`
+
+	// Present only on the host that runs the responder.
+	ResponderCertSHA256 string `yaml:"responder_cert_sha256"`
+	ResponderPorts      string `yaml:"responder_ports"`
 }
 
 // Registry is the parsed probes.yaml.

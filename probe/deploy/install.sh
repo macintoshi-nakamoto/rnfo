@@ -33,7 +33,12 @@ install -d -m 0750 -o rnfo -g rnfo "$STATE" "$STATE/data" "$STATE/data/measureme
 install -d -m 0755 /etc/rnfo
 
 echo "==> binary"
-install -m 0755 "$SRC/rnfo-probe" "$PREFIX/bin/rnfo-probe"
+# Written to a temporary name and renamed. A plain install over a binary that
+# is currently executing fails with ETXTBSY, which would abort an upgrade in
+# the middle of a measurement run; rename is atomic and the running process
+# keeps its own inode until it exits.
+install -m 0755 "$SRC/rnfo-probe" "$PREFIX/bin/rnfo-probe.new"
+mv -f "$PREFIX/bin/rnfo-probe.new" "$PREFIX/bin/rnfo-probe"
 
 echo "==> configuration"
 # Written every time so that a probe's identity can be corrected by re-running
@@ -54,6 +59,9 @@ RNFO_STATE_DIR=$STATE/state
 # silent difference between machines.
 RNFO_IP_FAMILY=v4
 RNFO_CONCURRENCY=12
+# Our own endpoints (the responder). Written by tools/deploy.py from .env; the
+# agent tolerates the file being absent.
+RNFO_OWN_TARGETS=/etc/rnfo/own.csv
 RNFO_KEEP_DAYS=90
 EOF
 chmod 0644 /etc/rnfo/probe.env
