@@ -319,44 +319,74 @@ Frankfurt**, against 7 for the Dutch control. Pairing the two foreign hosts dire
 266 targets fail from AS210644 and succeed from AS200823, 260 of them `connect_timeout`,
 241 of them on the Russian list.
 
-Direct tests from the Frankfurt host toward the Moscow probe, which the project
-controls and whose firewall accepts port 22 from anywhere:
+Direct TCP tests between hosts the project controls, all with the port open in the
+destination's firewall (a correction is recorded below):
 
-| From AS210644 to | Result |
-|---|---|
-| Moscow probe, ICMP | answers, 38 ms |
-| Moscow probe, TCP SYN to 22 | dropped, timeout |
-| three Russian sites from the list, TCP 443 | dropped, timeout |
-| Dutch AS200823 host, TCP SYN to 22 | answers |
-| *reverse:* Moscow probe to Frankfurt host, TCP 443 | answers (the SNI experiment ran over it) |
+| From | To | TCP | ICMP |
+|---|---|---|---|
+| Frankfurt AS210644 | Moscow probe AS203273, port 22 | **dropped** | answers, 38 ms |
+| Frankfurt AS210644 | three Russian sites from the list, port 443 | **dropped** | — |
+| Frankfurt AS210644 | Dutch AS200823 host, port 22 | answers | — |
+| Moscow probe AS203273 | Frankfurt AS210644, ports 443 and 22 | **dropped** | answers (11 hops) |
+| Moscow probe AS203273 | AS200823 hosts in Frankfurt and the Netherlands, 443 | answers | — |
+| Dutch AS200823 | Moscow probe, port 22; Frankfurt AS210644, 443 and 22 | answers | — |
+| AS200823 node in Frankfurt | Moscow probe, port 22; Frankfurt AS210644, 443 | answers | — |
 
-The failures spread across 168 distinct /16 destination networks, with the ten largest
-holding only 26 % of them. That is not the signature of individual sites blocklisting
-a provider; that would cluster. It is the signature of something on the path dropping
-**unsolicited inbound TCP SYNs from this source prefix toward Russian destinations**,
-while letting ICMP and the SYN-ACKs of Russian-initiated connections through. That is a
-stateful, direction-aware filter, and it is exactly the "whole hosting prefixes blocked"
-behaviour the brief asked to be tested.
+So TCP between the AS210644 Frankfurt prefix and the Russian networks tested is dead
+**in both directions**, ICMP passes, and the same prefix exchanges TCP with AS200823
+hosts in the same city without trouble. The failures toward Russia spread across 168
+distinct /16 destination networks, with the ten largest holding only 26 % of them —
+not the signature of individual sites blocklisting a provider, which would cluster,
+but of a TCP-specific drop on the path between that prefix and Russia. The condition
+predates any experiment of ours: the first full run from Frankfurt, started before the
+responder existed, already showed it.
 
-What it does not prove. The alternative is an egress policy at the source provider's
-transit toward Russia, TCP-only. Two checks would separate them and are not yet done:
-the same test from a third foreign AS, and a look at which Russian destination
-networks let the SYN through (some do — 5 of 9 targets in `95.163.0.0/16` answered),
-since per-operator variation is a Russian-side signature and a uniform failure is a
-source-side one.
+**Correction.** An earlier draft of this section stated that the reverse direction,
+Moscow to Frankfurt, worked, on the grounds that the SNI experiment had started over
+it. That was an inference from a process starting, not a measurement, and the
+measurement contradicts it: every one of the experiment's fifty connection attempts
+timed out at the TCP handshake. The claim is withdrawn here rather than silently
+edited, because the dataset's value rests on that habit.
+
+What it does not prove. Russian-side filtering of the prefix (the "whole hosting
+prefixes blocked" behaviour the brief asked about) and a TCP-only egress policy at the
+source provider's transit toward Russia would both look like this from where we stand.
+The discriminator is a Russian network that lets the prefix's TCP through: per-operator
+variation is a Russian-side signature, uniform failure is a source-side one. The
+project has exactly one genuine Russian vantage point, so this cannot be settled yet.
+A test from the owner's workstation looked as if it settled it — the Frankfurt host
+answered — until the workstation's egress was checked: it leaves through the owner's
+own tunnel and exits at an AS200823 node. That result was a measurement of AS200823,
+not of Russia, and it is discarded. It is also the cleanest illustration available of
+the vantage point rule (docs/METHODOLOGY.md §5).
 
 Consequence for the design: `de-fra-vps` is a valid control for the international list
 and a subject, not a control, for Russian-hosted targets. `nl-lim-panel` remains the
 primary control.
 
-### 8.3 Same address, different names
+### 8.3 Same address, different names — inconclusive, and why
 
 The responder accepts any server name and returns the same certificate. From the Dutch
 control, all ten names × five rounds completed (50/50 `ok`): outside Russia the name
-does not matter, which is the baseline the experiment needs. The Moscow half of the
-same run id is recorded in the data under `list: sni`; its per-name outcome is the
-first direct test of whether the TLS-stage failures in 8.1 key on the name or on the
-address. *(Result to be entered here from the archived rows.)*
+does not matter, which is the baseline the experiment needs.
+
+From Moscow, run id `2026-09-04T21:00Z/sni`: **50 of 50 attempts timed out at the TCP
+handshake**, for every name including the trial that sends no name at all, with zero
+bytes exchanged. The `own` targets confirm it every fifteen minutes: all four responder
+ports, `connect_timeout` from Moscow, since the first run that carried them.
+
+The experiment therefore says nothing about names. It cannot: the address is
+unreachable at a layer below the one where a name is sent. What it does say is that the
+responder, as placed, is unusable from the project's Russian vantage point, and that
+every Tier 2 and Tier 3 experiment that needs a Moscow-to-responder connection is
+blocked until a responder exists on a prefix that Russian networks pass TCP to.
+
+Two things are kept from this. The Frankfurt host stays where it is as a control for
+the international list and as the *subject* of a continuous measurement: the `own`
+rows from Moscow every fifteen minutes are a longitudinal record of whether the prefix
+block persists, lifts, or changes ports — the kind of series that is only obtainable
+by leaving an instrument in place. And the SNI experiment is ready to run the moment a
+reachable responder exists; the code and the name rule do not change.
 
 ---
 
@@ -408,9 +438,11 @@ endpoints is ever contacted. No enumeration, no range scanning, no port sweeps.
 6. The identity lookup depends on two third-party geolocation providers. When both are
    unreachable the run continues on a cached identity and records an
    `identity_unknown` event; the ASN in those rows is stale by up to three hours.
-7. The SNI experiment writes its rows only when the whole run completes; a run killed
-   halfway leaves nothing. The scheduled measurements stream rows as they finish and
-   do not have this weakness.
-8. Clock discipline is verified but not yet monitored. `chrony` on the Moscow probe
+7. The responder is on a prefix the Russian vantage point cannot reach by TCP
+   (section 8.3). Until a responder exists on a reachable prefix, the SNI experiment,
+   the volume-trigger experiment and all of Tier 3 are not runnable from Russia.
+8. The owner's workstation is inside the owner's own tunnel and is not a Russian
+   vantage point. No home-broadband measurement exists yet.
+9. Clock discipline is verified but not yet monitored. `chrony` on the Moscow probe
    reported an offset of −1.2 ms on 2026-09-04, which is fine for Tier 1 and adequate
    for Tier 2, but there is no alert if it drifts.

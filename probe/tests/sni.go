@@ -52,14 +52,17 @@ var DefaultSNITrials = []SNITrial{
 	{"www.euronews.com", "blocked_observed"},
 }
 
-// SNIExperiment runs every trial repeats times against ip:port.
+// SNIExperiment runs every trial repeats times against ip:port, handing each
+// finished Measurement to emit the moment it exists. emit is where the caller
+// stamps identity and writes the row; nothing is buffered here, so a run that
+// is killed part-way still leaves everything it measured on disk.
 //
 // Trials are interleaved rather than grouped: all names are tried once, then
 // again, and so on. Grouping would confound the name with the moment it was
 // measured, which matters because filtering state can change between the first
 // trial and the last, and because a block triggered by one name may persist
 // for the whole tuple afterwards.
-func SNIExperiment(ctx context.Context, ip, port string, repeats int, trials []SNITrial, o Options) []*schema.Measurement {
+func SNIExperiment(ctx context.Context, ip, port string, repeats int, trials []SNITrial, o Options, emit func(*schema.Measurement)) []*schema.Measurement {
 	if repeats < 1 {
 		repeats = 1
 	}
@@ -97,6 +100,9 @@ func SNIExperiment(ctx context.Context, ip, port string, repeats int, trials []S
 				m.Target = "(no sni)"
 			}
 			m.Attempt = round
+			if emit != nil {
+				emit(m)
+			}
 			out = append(out, m)
 
 			// Spacing matters here. Back-to-back connections to one tuple can

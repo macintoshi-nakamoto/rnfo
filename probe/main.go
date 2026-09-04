@@ -322,11 +322,9 @@ func runSNI(ctx context.Context, a sniArgs) {
 	log.Printf("run %s: sni experiment against %s:%s, %d names x %d rounds, probe %s",
 		runID, a.ip, a.port, len(tests.DefaultSNITrials), a.repeats, a.probeID)
 
-	rows := tests.SNIExperiment(ctx, a.ip, a.port, a.repeats, tests.DefaultSNITrials, opts)
-
 	byVerdict := map[string]int{}
 	ok := 0
-	for _, m := range rows {
+	emit := func(m *schema.Measurement) {
 		m.RunID = runID
 		m.TS = time.Now().UTC().Format("2006-01-02T15:04:05.000Z")
 		m.Probe, m.Net = a.probeID, a.netType
@@ -339,7 +337,9 @@ func runSNI(ctx context.Context, a sniArgs) {
 		if err := mw.Write(m); err != nil {
 			log.Printf("write row: %v", err)
 		}
+		log.Printf("  %-26s round %d  %s", m.Target, m.Attempt, m.Verdict)
 	}
+	rows := tests.SNIExperiment(ctx, a.ip, a.port, a.repeats, tests.DefaultSNITrials, opts, emit)
 
 	finished := time.Now().UTC()
 	_ = rw.Write(schema.Run{

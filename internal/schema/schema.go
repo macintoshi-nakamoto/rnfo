@@ -10,7 +10,7 @@ package schema
 const Version = "v1"
 
 // AgentVersion identifies the binary that produced a record.
-const AgentVersion = "rnfo-probe/0.2.0"
+const AgentVersion = "rnfo-probe/0.2.1"
 
 // Network types a probe can sit on. "hosting" is a datacentre uplink,
 // "eyeball" is a residential subscriber line, "mobile" is a cellular carrier.

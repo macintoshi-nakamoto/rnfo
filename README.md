@@ -13,8 +13,11 @@ probe, two foreign controls in two autonomous systems, a responder, all firing o
 same UTC schedule and sharing run ids. First paired slot: from a Moscow hosting network,
 **25.2 % of the standard test list fails only from Russia, 100 % reproducibly, 84 % of
 it as a silent drop during the TLS handshake.** And the second foreign host produced a
-finding of its own: Russian networks drop unsolicited TCP SYNs from its prefix while
-passing ICMP. Details and caveats in [`docs/METHODOLOGY.md`](docs/METHODOLOGY.md) §8.
+finding of its own: TCP between its prefix and the Russian networks tested is dead in
+both directions while ICMP passes — which also means the responder on it cannot be
+reached from Moscow, and the SNI experiment is on hold until a reachable one exists.
+Details, the correction of an early wrong claim, and caveats in
+[`docs/METHODOLOGY.md`](docs/METHODOLOGY.md) §8.
 
 ---
 
@@ -145,8 +148,9 @@ Listed here rather than in an appendix, because they bound what the data can sup
    because failures wait out their timeouts; a control finishes in two. Rows join on
    `(run_id, url)` and timestamps give the skew — fine for reachability, not for
    anything at packet granularity.
-5. **Tier 2 packet capture and Tier 3 transports have not started.** The responder is
-   up and the SNI experiment runs; TTL analysis and transport survivability do not yet.
+5. **The responder is unreachable by TCP from the Russian probe**, so the SNI
+   experiment, Tier 2 packet capture and Tier 3 transports are all waiting on a
+   responder host at a provider whose prefix Russian networks pass TCP to.
 
 Full discussion in [`docs/METHODOLOGY.md`](docs/METHODOLOGY.md) §7 and §10.
 
