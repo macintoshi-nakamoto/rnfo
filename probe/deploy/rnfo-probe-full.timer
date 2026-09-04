@@ -1,0 +1,22 @@
+[Unit]
+Description=RNFO full measurement run, every 6 hours
+
+[Timer]
+# Fixed UTC slots. Every probe uses the same schedule so that a Russian
+# measurement and its foreign control land in the same slot and share a run id.
+OnCalendar=*-*-* 00,06,12,18:00:00 UTC
+
+# Persistent: after downtime the missed run fires on boot, so
+# the gap is visible in the data as a late run rather than as silence.
+Persistent=true
+
+# systemd defaults to a one-minute accuracy window and would happily spread
+# probes across it. Simultaneity is the whole point of having a control, so the
+# window is closed and no randomised delay is added.
+AccuracySec=1s
+RandomizedDelaySec=0
+
+Unit=rnfo-probe@full.service
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,28 @@
+# Secrets. Nothing that authenticates anywhere is
+# ever committed, from the first commit onwards.
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+id_*
+*_ed25519
+*_rsa
+docs/consent/*.pdf
+
+# Build output.
+/bin/
+/dist/
+*.exe
+
+# Raw captures are never committed. They are large, they can contain third
+# party traffic, and the published artefact is derived data plus code.
+*.pcap
+*.pcap.gz
+*.pcapng
+/data/raw/
+
+# Local scratch.
+*.tmp
+*.bak
+.DS_Store

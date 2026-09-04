@@ -1,0 +1,44 @@
+[Unit]
+Description=RNFO reachability measurement (%i profile)
+Documentation=https://github.com/macintoshi-nakamoto/rnfo
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=rnfo
+Group=rnfo
+EnvironmentFile=/etc/rnfo/probe.env
+ExecStart=/opt/rnfo/bin/rnfo-probe -profile %i
+# A full run over the whole test list can legitimately take most of an hour on
+# a filtered link, because every timeout is a target waiting out its deadline.
+TimeoutStartSec=3600
+Nice=10
+IOSchedulingClass=idle
+
+# The agent needs nothing but its own data directory and the network. Anything
+# more would make an abuse strike or a compromise on a probe expensive.
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+ProtectProc=invisible
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+CapabilityBoundingSet=
+ReadWritePaths=/var/lib/rnfo
+MemoryMax=512M
+TasksMax=256

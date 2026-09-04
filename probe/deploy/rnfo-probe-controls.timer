@@ -1,0 +1,16 @@
+[Unit]
+Description=RNFO control run, every 15 minutes
+
+[Timer]
+# Controls are cheap (ten targets) and exist to give probe downtime and local
+# outages a fine time resolution. Without them, a six-hour gap in the full runs
+# cannot be told apart from six hours of heavy filtering.
+OnCalendar=*:00/15:00 UTC
+Persistent=true
+AccuracySec=1s
+RandomizedDelaySec=0
+
+Unit=rnfo-probe@controls.service
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,10 @@
+{
+  "fetched_utc": "2026-09-04T19:56:56Z",
+  "source_repo": "https://github.com/citizenlab/test-lists",
+  "source_commit": "da9219f56c9ec29a2999bbf2ffb023159df3fe9c",
+  "files": {
+    "citizenlab-global.csv": { "sha256": "0d415fa3d5e90b4459bd4caad79dd1201e3360557e20b613e5897bef080651e6", "urls": 1725 },
+    "citizenlab-ru.csv":     { "sha256": "88c9b5e9d10fda6bfd76720260865a2d5e51e788b7dff703dac36dbfc82e7693", "urls": 1092 }
+  },
+  "note": "Pinned copy. Re-fetch with tools/fetch_test_lists.sh; a refresh is an event and must be recorded in docs/CHANGELOG-lists.md."
+}

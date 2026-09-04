@@ -1,0 +1,118 @@
+# RNFO probe registry.
+#
+# This file is the authority on what a probe id means. The validator rejects
+# any measurement row whose probe id is not listed here, so a row can never
+# enter the dataset without a documented vantage point behind it.
+#
+# Fields:
+#   id         stable identifier, written into every row; never reused
+#   role       probe (measures) | control (measures, outside Russia) |
+#              responder (is measured) | collector (stores)
+#   status     active | planned | retired
+#   net        hosting | eyeball | mobile   -- see docs/METHODOLOGY.md
+#   asn        autonomous system as observed, not as advertised by the seller
+#   consent    owner  = machine belongs to the project
+#              recorded = third party, written consent on file (docs/consent/)
+#   dedicated  true only if the machine runs nothing but this project
+#
+# Addresses are deliberately absent. Probe addresses are not part of the
+# published dataset (see docs/ETHICS.md); connection details live in .env,
+# which is not in git.
+
+schema: v1
+
+probes:
+  - id: ru-msk-vps
+    role: probe
+    status: active
+    since: 2026-09-04
+    net: hosting
+    country: RU
+    region: Moscow
+    city: Moscow
+    asn: AS203273
+    asn_name: NetCrafters OU
+    operator: NetCrafters OU
+    uplink: vps
+    consent: owner
+    dedicated: true
+    clock: chrony
+    notes: >
+      Dedicated to this project, nothing else installed. A hosting network,
+      not an eyeball network: Russian filtering equipment is deployed mainly
+      at operators serving subscribers, so this probe is expected to see less
+      filtering than a residential line. That difference is a result and must
+      not be smoothed over by treating this probe as representative of Russia.
+
+  - id: ru-mow-home
+    role: probe
+    status: planned
+    net: eyeball
+    country: RU
+    region: Moscow Oblast
+    asn: unknown
+    operator: unknown
+    uplink: broadband
+    consent: owner
+    dedicated: false
+    notes: >
+      The residential vantage point, and the scientifically important one.
+      Blocked on two conditions before it may be activated: the measuring host
+      must not send its traffic through the operator's own AmneziaWG tunnel
+      (the vantage point rule (docs/METHODOLOGY.md §5), otherwise we measure our own VPN), and the
+      address is dynamic, so an ASN change is an event and must be logged.
+
+  - id: ru-mobile
+    role: probe
+    status: planned
+    net: mobile
+    country: RU
+    asn: unknown
+    operator: unknown
+    uplink: cellular
+    consent: owner
+    dedicated: true
+    notes: >
+      Old Android with Termux, not yet acquired. Same agent binary, built for
+      linux/arm64. Carrier NAT reduces the observed TTL by at least one hop,
+      which must be calibrated before any TTL analysis in Tier 2.
+
+  # ---------------------------------------------------------------------
+  # Foreign side. Nothing here is active yet, and the reason is a problem
+  # with the inventory rather than with the code. See docs/METHODOLOGY.md,
+  # "Vantage point independence".
+  # ---------------------------------------------------------------------
+
+  - id: nl-lim-panel
+    role: control
+    status: planned
+    net: hosting
+    country: NL
+    region: Limburg
+    asn: AS200823
+    asn_name: MHost LLC
+    operator: MHost LLC
+    uplink: vps
+    consent: owner
+    dedicated: false
+    notes: >
+      Candidate foreign control. NOT dedicated: this machine runs a production
+      service with real users. Acceptable for Tier 1, which is outbound HTTP
+      only and adds no attack surface; unacceptable for the Tier 3 responder,
+      which must be a clean address.
+
+  - id: de-fra-clean
+    role: responder
+    status: planned
+    net: hosting
+    country: DE
+    asn: unknown
+    operator: to be chosen outside AS200823
+    uplink: vps
+    consent: owner
+    dedicated: true
+    notes: >
+      Not yet bought. This is the missing piece of the design. It must be in a
+      different autonomous system from every other host we own, because the
+      question "does filtering follow the destination prefix or the
+      destination AS" cannot be answered with four hosts inside one AS.

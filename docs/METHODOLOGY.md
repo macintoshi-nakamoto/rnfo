@@ -1,0 +1,296 @@
+# Methodology
+
+Version 0.1, 2026-09-04. This document describes what the instrument measures, what
+it deliberately does not measure, and where the current design is weak. It is written
+to be read by someone deciding whether to trust the dataset.
+
+---
+
+## 1. Question
+
+How does network filtering inside Russia behave, at the protocol level, over time,
+and how does that behaviour differ between network types and between destinations?
+
+Three sub-questions, in the order the project can answer them:
+
+1. **What fails, and how?** Not "is this site blocked" but "at which stage of the
+   connection does it die, and what does the network do to kill it".
+2. **Does the mechanism depend on the network the user is on?** A datacentre uplink
+   and a residential line are not the same network and are not filtered by the same
+   equipment.
+3. **Does the mechanism depend on the destination?** On the name, on the address, on
+   the prefix, on the autonomous system, on the port, or on the volume of data.
+
+---
+
+## 2. Unit of measurement
+
+One **measurement** is one URL, from one probe, at one moment, carried to completion
+or to failure. It always produces exactly one row, including when it fails. This is
+the load-bearing rule of the dataset: absence of a row never means "nothing happened",
+it means the probe was not running, and the run records prove which.
+
+Measurements are grouped into **runs**. A run is one execution of the agent over one
+target profile. Every run writes a run record with start time, finish time, target
+count, verdict histogram, and control health.
+
+Runs are identified by their **slot**, not by their start time: the run id is the
+scheduled time floored to the profile period (six hours for `full`, fifteen minutes
+for `controls`). Every probe uses the same UTC schedule with `AccuracySec=1s`, so a
+Russian measurement and its foreign control land in the same slot and share a run id.
+Pairing them is then a join on `(run_id, url)` rather than a guess about timing.
+
+---
+
+## 3. Staged measurement, and why not curl
+
+The obvious implementation is a shell script around `curl` and its exit code. The
+brief specifies exactly that, and the exit codes remain in the dataset as `curl_rc`
+so this data can be compared with curl-based measurements published elsewhere. But
+`curl` is not the instrument, because it answers the wrong question.
+
+`curl` exit code 56 means "connection reset by peer". It is returned whether the
+reset arrived:
+
+- immediately after the TCP handshake, before anything identifying was sent;
+- right after the TLS ClientHello, the first packet carrying the server name in
+  the clear;
+- in the middle of the response body, after tens of kilobytes.
+
+Those are three different filtering mechanisms — address-based, name-based, and
+volume- or content-based — and they are indistinguishable in curl's output. The agent
+therefore performs the connection in explicit stages and records:
+
+| Field | Meaning |
+|---|---|
+| `stage` | how far the connection got: `dns`, `tcp`, `tls`, `request`, `response`, `ok` |
+| `verdict` | closed vocabulary combining stage and mechanism, e.g. `tls_reset` |
+| `errno` | the kernel-level error: `ECONNRESET`, `ETIMEDOUT`, `EHOSTUNREACH`, … |
+| `bytes_read` | wire bytes that arrived before the connection died |
+| `t_connect`, `t_tls` | handshake durations as separate deltas, not cumulative |
+
+`bytes_read` deserves its own note. The reported behaviour where connections are cut
+after roughly 14–25 KB cannot be studied with a tool that reports only "the transfer
+failed". Counting wire bytes at the socket makes the cut-off point a number in every
+row, which turns an anecdote into a distribution.
+
+The first production run from Moscow, 2026-09-04, already separates mechanisms that
+curl would have merged: 88 targets timed out *during the TLS handshake* while 13
+timed out *at TCP connect*, and 5 were *reset* during the handshake after a 40 ms TCP
+handshake had succeeded. Same curl exit codes; three different network behaviours.
+
+### What the staged design does not prove
+
+A reset observed at the TLS stage is *consistent with* name-based blocking. It is not
+proof. The server itself may have reset the connection, and a shared address may be
+blocked for reasons unrelated to the name requested. Distinguishing these requires
+either the TTL analysis or the responder experiments, both of which are Tier 2. Until
+then, Tier 1 verdicts describe **behaviour**, not **intent**, and the analysis must
+use that language.
+
+---
+
+## 4. Controls
+
+### 4.1 The foreign control
+
+Every measurement from inside Russia is meaningless without a simultaneous
+measurement from outside it. A site can be unreachable because it is filtered, or
+because it is down, or because it blocks datacentre addresses, or because its
+certificate expired. Only the foreign control separates those.
+
+**This requirement is currently not met.** See section 7. It is the single largest
+open defect in the project as of 2026-09-04, and no result may be published until it
+is closed.
+
+### 4.2 The connectivity control set
+
+Ten targets, five domestic and five international, are measured at the start of every
+run and again every fifteen minutes. They exist to answer a different question from
+the study: *was the probe on the network at all?*
+
+A run where most controls fail says nothing about filtering, and the run record
+carries `healthy: false` so that analysis discards it rather than reading a local
+outage as a wave of blocking. The threshold is half the control set; the raw counts
+are recorded so a different threshold can be applied later without re-measuring.
+
+Domestic and international controls are separated on purpose. Domestic controls up
+and international controls down is a different failure from everything down, and the
+distinction is visible without any extra instrumentation.
+
+### 4.3 The confirmation retry
+
+A target that fails is measured once more, three seconds later, recorded as
+`attempt: 2`. A failure that reproduces immediately is much stronger evidence than a
+single observation, and the two rows let the analysis quantify how much of the
+observed failure rate is transient.
+
+The retry is skipped when more than 40 % of the run failed. At that point the probe
+has most likely lost its uplink, retrying every target proves nothing, and it would
+double the load placed on the test-list sites for no information.
+
+---
+
+## 5. Deliberate choices that constrain interpretation
+
+Each of these is a decision that makes the dataset internally consistent at the cost
+of generality. They are listed so that a reader knows what the numbers do and do not
+cover.
+
+**Address family is fixed to IPv4.** The Moscow VPS has working IPv6 and its
+resolver returns AAAA records first; a home broadband line or an Android handset
+frequently has no IPv6 at all. Left to the resolver, one probe would measure IPv6 and
+another IPv4, and the comparison between them would be meaningless. Every row records
+`ip_family`, and a v4-versus-v6 comparison is a deliberate separate run, never a
+silent difference between machines. A host with no address of the requested family
+produces the verdict `no_address_family`, which is explicitly *not* a blocking
+verdict — mistaking one for the other would manufacture censorship out of a
+configuration difference.
+
+**ALPN offers `http/1.1` only.** HTTP/2 would introduce a second connection-handling
+code path that swallows socket-level errors, which is precisely what we are trying to
+observe. The cost is that HTTP/2-only behaviour is invisible to this dataset.
+
+**The User-Agent is an ordinary browser string.** A distinctive research User-Agent
+would be more polite, and it is what a courteous scanner does. It is not what this
+instrument can afford: a middlebox that treats an unknown User-Agent differently
+would bias the measurement away from what a real user experiences. The project
+identifies itself in a different way — through this repository, a published contact
+address, and reverse DNS on the probes — rather than by biasing its own measurement.
+See `ETHICS.md`.
+
+**Certificates are fingerprinted, not enforced.** The agent completes the TLS
+handshake with verification disabled and records the leaf certificate's hash, subject,
+issuer and whether it matches the requested name. Aborting on an invalid certificate
+would hide the interception it would be evidence of. Note the converse trap:
+`cert_name_ok: false` on a row whose verdict is `ok` usually means the site is simply
+misconfigured, not that anything intercepted it. Interception evidence requires an
+unexpected issuer, a fingerprint that differs from the foreign control's for the same
+host in the same slot, or both.
+
+**Bodies are not stored.** Only length, the SHA-256 of the first 64 KiB, and the
+`<title>`. That is enough to recognise a block page and to detect that two probes
+received different content for the same URL, and it means the dataset carries no
+third-party content.
+
+**Target order is shuffled per slot with a seed derived from the run id.** The order
+is therefore identical across probes in the same slot — so pairing stays tight — and
+different between slots, so no site is permanently measured first. Without this, every
+result for the first site in the list would be correlated with whatever happens at the
+start of a run.
+
+---
+
+## 6. Vantage points
+
+Probes are registered in `probes.yaml`, which is the authority on what a probe id
+means. The validator rejects any row whose probe id is not registered, so a
+measurement can never enter the dataset without a documented vantage point.
+
+**Hosting is not eyeball.** Russian filtering equipment is deployed principally at
+operators serving subscribers. A datacentre uplink is expected to see substantially
+less filtering than a residential line. That difference is a *result* of this study,
+not an inconvenience, and the two must never be pooled into a single "Russia" figure.
+The `net` field exists to make pooling them a deliberate act.
+
+---
+
+## 7. Vantage point independence — the open defect
+
+This section exists because the inventory in the brief and the inventory that exists
+are not the same thing, and the difference determines which questions can be answered.
+
+Observed on 2026-09-04:
+
+| Host | Country reported | Autonomous system | Dedicated to this project |
+|---|---|---|---|
+| Moscow VPS | RU, Moscow | AS203273 NetCrafters OU | yes |
+| "Netherlands" panel | NL, Limburg | **AS200823 MHost LLC** | no — production service |
+| "Netherlands" node | NL, Limburg | **AS200823 MHost LLC** | no — production service |
+| "Germany" node | DE, Frankfurt | **AS200823 MHost LLC** | no — production service |
+| "Poland" node | seller says PL, geolocation says LT | **AS200823 MHost LLC** | no — production service |
+
+Three consequences.
+
+**The foreign side is one network, not four.** Every foreign machine is in AS200823,
+and three of them share the prefix 103.114.43.0/24. The question the brief calls out
+as important — *does filtering depend on the destination prefix or the destination
+AS?* — has a sample size of one on the AS axis. Three prefixes give a weak test of
+the prefix axis and no test at all of the AS axis. No number of additional machines
+at this provider will fix this; it requires a machine at a different provider.
+
+**None of the foreign machines is clean.** All four run a production VPN service with
+live users. This breaks the "probes are dedicated machines" constraint, and it does
+something worse to the science: a Tier 3 experiment that measures how long a transport
+survives against one of these addresses is not measuring the transport. It is
+measuring an address that already carries that exact transport for real users. The
+result would be uninterpretable, and a positive result — successfully provoking a
+block — would take a production service down.
+
+**The "Poland" machine is not in Poland.** The seller advertises Warsaw. Cloudflare,
+ipinfo and ipwho.is all place it in Lithuania; the whois record says PL and the
+organisation is registered in Georgia. Whatever it is, its geolocation is contested,
+and a dataset field that says "PL" because an invoice said so is a fabricated
+measurement. Country is recorded as observed, with the disagreement documented, or
+the machine is not used for any claim that depends on location.
+
+### What closing this requires
+
+One dedicated VPS at a provider outside AS200823, with nothing else on it. It becomes
+the foreign control and the Tier 2/3 responder. Cost is in the region of four to five
+euros a month, and it unblocks the SNI experiments, the volume-trigger experiments,
+and every Tier 3 question. Until it exists:
+
+- Tier 1 may run against a non-dedicated foreign host, because it is outbound HTTP
+  only and adds no listening surface. The deviation is recorded in `probes.yaml` on
+  the probe entry itself.
+- Tier 2 and Tier 3 do not start. A responder on a production VPN address would
+  produce results that cannot be defended and could take the service down.
+
+---
+
+## 8. Load and politeness
+
+The `full` profile covers 2 817 unique URLs: the pinned Citizen Lab `global` and `ru`
+lists, ten connectivity controls, and our own endpoints. It runs four times a day per
+probe at fixed UTC slots, with at most twelve concurrent requests and a random delay
+of up to 250 ms before each.
+
+Per target that is one request every six hours from each probe — less traffic than a
+single person opening the page once. The lists are the standard research lists,
+downloaded once and pinned by commit hash and SHA-256 so that any row can be traced to
+the exact target set that produced it. No host outside the pinned lists and our own
+endpoints is ever contacted. No enumeration, no range scanning, no port sweeps.
+
+---
+
+## 9. Reproducibility
+
+- The target lists are compiled into the agent binary. The binary that produced a row
+  fully determines which targets were measured, and a list refresh is a rebuild and a
+  recorded event rather than a silent change under a running probe.
+- Every run record carries `list_manifest`, mapping each list to the SHA-256 of the
+  file the run used.
+- Binaries are built with `-trimpath` so they are rebuildable from the tagged commit.
+- Every probe runs the identical binary and identical systemd units. The only file
+  that differs between deployments is `/etc/rnfo/probe.env`, which carries the probe
+  id and network type. Two deployments differing in anything else are two different
+  instruments and their data cannot be compared.
+
+---
+
+## 10. Known limitations
+
+1. No foreign control is running yet (section 7). Nothing may be published until it is.
+2. One Russian vantage point, on a hosting network, which is the *less* interesting of
+   the two network types.
+3. IPv4 only.
+4. HTTP/1.1 only.
+5. Tier 1 observes behaviour, not intent. Attribution of a reset to in-path injection
+   requires the TTL analysis, which is not implemented.
+6. The identity lookup depends on two third-party geolocation providers. When both are
+   unreachable the run continues on a cached identity and records an
+   `identity_unknown` event; the ASN in those rows is stale by up to three hours.
+7. Clock discipline is verified but not yet monitored. `chrony` on the Moscow probe
+   reported an offset of −1.2 ms on 2026-09-04, which is fine for Tier 1 and adequate
+   for Tier 2, but there is no alert if it drifts.
