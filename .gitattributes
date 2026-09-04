@@ -1,0 +1,5 @@
+# Probes are Linux; a CRLF checkout on Windows would break the installer's
+# shebang and change the checksum of the pinned target lists.
+* text=auto eol=lf
+*.png binary
+*.jsonl text eol=lf
