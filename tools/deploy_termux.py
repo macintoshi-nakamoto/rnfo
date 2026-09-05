@@ -184,7 +184,7 @@ def main():
             info.size, info.mode = len(data), mode
             tar.addfile(info, io.BytesIO(data))
         add("rnfo-probe", binary, 0o755)
-        for name in ("install.sh", "rnfo-boot.sh", "supervise.sh"):
+        for name in ("install.sh", "rnfo-boot.sh", "supervise.sh", "status.sh"):
             with open(os.path.join(REPO, "probe", "deploy", "termux", name), "rb") as f:
                 add(name, f.read().replace(b"\r\n", b"\n"), 0o755)
         if os.path.exists(a.pubkey):
@@ -207,7 +207,9 @@ def main():
     sftp.close()
     run(c, f"cd {remote} && tar xzf b.tgz && rm b.tgz")
     tunnel = f" '{a.tunnel}' {a.tunnel_port}" if a.tunnel and a.tunnel_port else ""
-    run(c, f"bash {remote}/install.sh {a.probe_id} {a.net} '{dns}' {a.max_body}{tunnel}")
+    watch = env.get("RNFO_WATCH_PUBKEY", "")
+    prefix = f"WATCH_PUBKEY='{watch}' " if watch else ""
+    run(c, f"{prefix}bash {remote}/install.sh {a.probe_id} {a.net} '{dns}' {a.max_body}{tunnel}")
     run(c, f"rm -rf {remote} {home}/rnfo-probe.test")
     c.close()
     print("==> done. Add the phone to probes.yaml (status: active) and .env (RNFO_SSH_...) once its first run record exists.")

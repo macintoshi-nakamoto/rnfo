@@ -192,16 +192,49 @@ func installResolver(addr string) {
 	if addr == "" {
 		return
 	}
-	if _, _, err := net.SplitHostPort(addr); err != nil {
-		addr = net.JoinHostPort(addr, "53")
+	use := func(a string) {
+		if _, _, err := net.SplitHostPort(a); err != nil {
+			a = net.JoinHostPort(a, "53")
+		}
+		net.DefaultResolver = &net.Resolver{
+			PreferGo: true,
+			Dial: func(ctx context.Context, network, _ string) (net.Conn, error) {
+				d := net.Dialer{Timeout: 5 * time.Second}
+				return d.DialContext(ctx, network, a)
+			},
+		}
+		resolverUsed = a
 	}
-	net.DefaultResolver = &net.Resolver{
-		PreferGo: true,
-		Dial: func(ctx context.Context, network, _ string) (net.Conn, error) {
-			d := net.Dialer{Timeout: 5 * time.Second}
-			return d.DialContext(ctx, network, addr)
-		},
+	use(addr)
+	if resolverAnswers() {
+		return
 	}
+	// The configured resolver is dead: the router was replaced, the subnet
+	// changed, the handset moved. A probe that resolves nothing for months is
+	// worse than one that resolves through a public server and says so in
+	// every run record, so fall back and record it as an event.
+	for _, fb := range resolverFallbacks {
+		use(fb)
+		if resolverAnswers() {
+			resolverFallbackFrom = addr
+			return
+		}
+	}
+	use(addr) // nothing answers; keep the configured one so the failure is honest
+}
+
+var (
+	resolverUsed         string
+	resolverFallbackFrom string
+	resolverFallbacks    = []string{"1.1.1.1:53", "8.8.8.8:53"}
+)
+
+// resolverAnswers is a canary lookup of a name that is also a control target.
+func resolverAnswers() bool {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_, err := net.DefaultResolver.LookupIPAddr(ctx, "example.com")
+	return err == nil
 }
 
 func openWriters(cfg config) (*jsonl.Writer, *jsonl.Writer) {
@@ -265,6 +298,10 @@ func runOnce(ctx context.Context, cfg config, profile, runID string, mw, rw *jso
 	}
 	if !fresh && id.ASN == "unknown" {
 		writeEvent("identity_unknown", "", "", "no identity source reachable; run continues without an ASN")
+	}
+	if resolverFallbackFrom != "" {
+		writeEvent("resolver_fallback", resolverFallbackFrom, resolverUsed,
+			"configured resolver did not answer at start; a public resolver is in use, which changes what DNS measures")
 	}
 
 	// Clock discipline is measured, not assumed. One SNTP exchange; the
@@ -376,7 +413,7 @@ func runOnce(ctx context.Context, cfg config, profile, runID string, mw, rw *jso
 		ControlsIntlTotal: ctrlIntlTotal, ControlsIntlOK: ctrlIntlOK,
 		Healthy:       healthy,
 		ListManifest:  set.Manifest,
-		Resolver:      cfg.dns,
+		Resolver:      resolverUsed,
 		MaxBody:       cfg.maxBody,
 		ClockOffsetMS: clockMS,
 		ClockSource:   clockSrc,
@@ -454,7 +491,7 @@ func runSNI(ctx context.Context, cfg config, ip, port string, repeats int, runID
 		// address we own, so a control set measuring other hosts would say
 		// nothing about whether this particular tuple was reachable.
 		Healthy:  true,
-		Resolver: cfg.dns,
+		Resolver: resolverUsed,
 		MaxBody:  cfg.maxBody,
 	})
 

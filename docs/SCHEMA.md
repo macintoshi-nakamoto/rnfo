@@ -200,6 +200,7 @@ Written into `data/runs/`. Distinguished by `"kind": "event"`.
 | `agent_started` | (0.3.0+) the daemon started; on a handset this marks a reboot or an Android kill-and-restart |
 | `run_skipped_overlap` | (0.3.0+) the daemon skipped a slot because the previous run of that profile was still going, as systemd would refuse a second instance |
 | `clock_offset` | (0.4.0+) the clock was more than one second from network time; timestamps in that run carry that error |
+| `resolver_fallback` | (0.4.1+) the configured resolver did not answer at start and a public one is in use; `from` is the configured one, `to` the one used. DNS behaviour in such runs is that of the fallback resolver |
 | `identity_unknown` | both geolocation providers were unreachable; the run continued on a cached identity up to three hours old |
 
 ---

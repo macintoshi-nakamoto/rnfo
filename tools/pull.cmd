@@ -13,7 +13,7 @@ bin\rnfo-collect.exe pull >> %LOG% 2>&1
 echo ==== %DATE% %TIME% validate >> %LOG%
 bin\rnfo-collect.exe validate >> %LOG% 2>&1
 echo ==== %DATE% %TIME% health >> %LOG%
-bin\rnfo-collect.exe health -alert >> %LOG% 2>&1
+bin\rnfo-collect.exe health -alert -responder >> %LOG% 2>&1
 echo ==== %DATE% %TIME% mirror >> %LOG%
 scp -q -r -o BatchMode=yes data rnfo-archive:/var/lib/rnfo-archive/ >> %LOG% 2>&1
 echo ==== %DATE% %TIME% done >> %LOG%

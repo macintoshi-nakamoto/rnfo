@@ -247,11 +247,42 @@ to `data/logs/pull.log`. The archive therefore exists in three places: on each p
 for 90 days, on the workstation, and on the mirror. It is not in git; publication is a
 separate, versioned release under `data/LICENSE`.
 
-**Health.** `rnfo-collect health` asks every active probe for its newest controls run
-and calls it stale after 45 minutes (three slots). Exit code 1 if anything is stale.
-With `RNFO_ALERT_URL` in `.env` and `-alert`, it sends a message: a URL containing
-`{text}` is fetched with GET (a Telegram bot's `sendMessage` URL works as is); any other
-URL receives a JSON POST `{"text": ...}`. Check it with `schtasks /Query /TN "RNFO daily pull"`; remove it
+**Health and alerts.** `rnfo-collect health` runs one fixed status command on every
+active probe and reports the newest controls run: stale after 45 minutes (three
+slots), or unhealthy, or a clock more than five seconds off. `-responder` also fetches
+`/v1/health` from the responder and compares the certificate with the fingerprint in
+`probes.yaml`. Exit code 1 if anything is wrong.
+
+With `-alert` and `RNFO_ALERT_URL` in `.env`, it messages on **changes**: a probe going
+stale is reported once, again every six hours while it stays stale (`-repeat`), and
+once more when it recovers. State lives in the `-state` file. A URL containing
+`{text}` is fetched with GET after substitution, which is what a Telegram bot's
+`sendMessage` wants; any other URL receives a JSON POST `{"text": ...}`. Telegram
+detail that costs an hour if forgotten: a bot cannot message a person until that
+person has opened the bot and pressed Start once.
+
+Test the whole path by making everything look stale: `rnfo-collect health -alert
+-stale 1s`, then run it again normally and expect the RECOVERED message.
+
+**Watchers.** No single machine can see every probe, because the Frankfurt prefix does
+not exchange TCP with Russia. So there are three:
+
+| Where | Runs | Sees |
+|---|---|---|
+| Moscow probe, `rnfo-watch.timer`, hourly at :07 | `health -alert -probes ru-msk-vps,ru-mow-home,nl-lim-panel` | itself (`local`), the phone through its tunnel on `127.0.0.1:2201`, the panel host |
+| Frankfurt host, same unit | `health -alert -probes de-fra-vps` | itself |
+| workstation, Task Scheduler `RNFO health`, hourly | `health -alert -responder` | everything, plus the responder, while the workstation is on |
+
+Each watcher holds its own key (`/root/.ssh/rnfo_watch`), authorised on the probes it
+checks with `restrict,command="<status script>"`, so the key can run the status script
+and nothing else. Install or update one with `tools/deploy_watch.py`; the probe side is
+handled by the deploy tools when `RNFO_WATCH_PUBKEY` is in `.env`.
+
+**Resolver fallback.** If the configured resolver (`RNFO_DNS`, the home router) stops
+answering, the agent falls back to a public resolver at start, records
+`resolver_fallback` as an event and the resolver actually used in every run record.
+Measurements continue; DNS-related rows from those runs are measuring a different
+resolver and the data says so. Check it with `schtasks /Query /TN "RNFO daily pull"`; remove it
 with `schtasks /Delete /TN "RNFO daily pull" /F`. Data also accumulates on each probe
 for 90 days, so a workstation that is off for a week loses nothing. A collector on a
 machine that is always up is still the right long-term home; this is the bridge.

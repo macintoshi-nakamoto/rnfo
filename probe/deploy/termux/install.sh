@@ -75,6 +75,13 @@ chmod 0600 "$BASE/probe.env"
 
 echo "==> supervisor and boot script (Termux:Boot runs everything in ~/.termux/boot after unlock)"
 install -m 0755 "$SRC/supervise.sh" "$BASE/bin/supervise.sh"
+install -m 0755 "$SRC/status.sh" "$BASE/bin/status.sh"
+if [ -n "${WATCH_PUBKEY:-}" ]; then
+  mkdir -p "$HOME/.ssh" && touch "$HOME/.ssh/authorized_keys" && chmod 700 "$HOME/.ssh" && chmod 600 "$HOME/.ssh/authorized_keys"
+  LINE="restrict,command=\"$BASE/bin/status.sh\" $WATCH_PUBKEY"
+  grep -qF "$WATCH_PUBKEY" "$HOME/.ssh/authorized_keys" || echo "$LINE" >> "$HOME/.ssh/authorized_keys"
+  echo "    watcher key authorised for status.sh only"
+fi
 install -m 0755 "$SRC/rnfo-boot.sh" "$HOME/.termux/boot/rnfo.sh"
 
 echo "==> recovery hook: opening the Termux app starts everything"

@@ -1,0 +1,13 @@
+[Unit]
+Description=RNFO health watcher, hourly
+
+[Timer]
+# Seven minutes past the hour: away from the measurement slot boundaries, so
+# the check never lands in the seconds when a run is starting.
+OnCalendar=*-*-* *:07:00 UTC
+Persistent=true
+AccuracySec=1min
+Unit=rnfo-watch.service
+
+[Install]
+WantedBy=timers.target

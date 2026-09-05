@@ -40,6 +40,15 @@ echo "==> binary"
 install -m 0755 "$SRC/rnfo-probe" "$PREFIX/bin/rnfo-probe.new"
 mv -f "$PREFIX/bin/rnfo-probe.new" "$PREFIX/bin/rnfo-probe"
 
+echo "==> status script (the one command a watcher's key may run)"
+install -m 0755 "$SRC/rnfo-status" "$PREFIX/bin/rnfo-status"
+if [ -n "${WATCH_PUBKEY:-}" ]; then
+  install -d -m 700 /root/.ssh && touch /root/.ssh/authorized_keys && chmod 600 /root/.ssh/authorized_keys
+  LINE="restrict,command=\"$PREFIX/bin/rnfo-status\" $WATCH_PUBKEY"
+  grep -qF "$WATCH_PUBKEY" /root/.ssh/authorized_keys || echo "$LINE" >> /root/.ssh/authorized_keys
+  echo "    watcher key authorised for rnfo-status only"
+fi
+
 echo "==> configuration"
 # Written every time so that a probe's identity can be corrected by re-running
 # the installer, but never silently: the previous file is kept.

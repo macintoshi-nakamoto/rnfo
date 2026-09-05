@@ -60,6 +60,7 @@ FILES = [
     "rnfo-probe-full.timer",
     "rnfo-probe-controls.timer",
     "install.sh",
+    "rnfo-status",
 ]
 
 
@@ -178,7 +179,9 @@ def main() -> None:
         run(c, "chmod 0644 /etc/rnfo/own.csv")
         print(f"==> own targets: responder {env['RNFO_RESPONDER_IP']} on {len(RESPONDER_TLS_PORTS)} ports")
 
-    run(c, f"bash {remote}/install.sh {a.probe_id} {a.net}")
+    watch = env.get("RNFO_WATCH_PUBKEY", "")
+    prefix = f"WATCH_PUBKEY='{watch}' " if watch else ""
+    run(c, f"{prefix}bash {remote}/install.sh {a.probe_id} {a.net}")
     run(c, f"rm -rf {remote}")
 
     if a.run:

@@ -1,0 +1,16 @@
+[Unit]
+Description=RNFO health watcher: alerts when a probe stops writing
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/rnfo/watch
+# watch.env holds RNFO_WATCH_ARGS, e.g. "-probes ru-msk-vps,ru-mow-home"; the
+# collector reads its own .env and probes.yaml from the working directory.
+EnvironmentFile=/opt/rnfo/watch/watch.env
+ExecStart=/opt/rnfo/bin/rnfo-collect health -alert $RNFO_WATCH_ARGS -state /opt/rnfo/watch/health.state.json
+# A stale probe makes the check exit 1 on purpose; that is a report, not a
+# unit failure worth systemd's attention.
+SuccessExitStatus=1
+TimeoutStartSec=300
