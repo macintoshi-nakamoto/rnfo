@@ -36,6 +36,7 @@ import (
 	"time"
 
 	"github.com/macintoshi-nakamoto/rnfo/internal/classify"
+	"github.com/macintoshi-nakamoto/rnfo/internal/clock"
 	"github.com/macintoshi-nakamoto/rnfo/internal/identity"
 	"github.com/macintoshi-nakamoto/rnfo/internal/jsonl"
 	"github.com/macintoshi-nakamoto/rnfo/internal/schema"
@@ -263,7 +264,19 @@ func runOnce(ctx context.Context, cfg config, profile, runID string, mw, rw *jso
 		writeEvent("asn_changed", prev.ASN, id.ASN, "uplink moved to a different autonomous system")
 	}
 	if !fresh && id.ASN == "unknown" {
-		writeEvent("identity_unknown", "", "", "both geolocation providers unreachable; run continues without an ASN")
+		writeEvent("identity_unknown", "", "", "no identity source reachable; run continues without an ASN")
+	}
+
+	// Clock discipline is measured, not assumed. One SNTP exchange; the
+	// result goes into the run record, and a large offset is an event too.
+	var clockMS *float64
+	clockSrc := ""
+	if off, src, err := clock.Offset(ctx); err == nil {
+		ms := float64(off.Microseconds()) / 1000
+		clockMS, clockSrc = &ms, src
+		if off > time.Second || off < -time.Second {
+			writeEvent("clock_offset", "", fmt.Sprintf("%.0fms", ms), "clock more than one second from network time; timestamps in this run carry that error")
+		}
 	}
 
 	stamp := func(m *schema.Measurement, t targets.Target, attempt int) {
@@ -361,10 +374,12 @@ func runOnce(ctx context.Context, cfg config, profile, runID string, mw, rw *jso
 		ByVerdict:     byVerdict,
 		ControlsTotal: ctrlTotal, ControlsOK: ctrlOK,
 		ControlsIntlTotal: ctrlIntlTotal, ControlsIntlOK: ctrlIntlOK,
-		Healthy:      healthy,
-		ListManifest: set.Manifest,
-		Resolver:     cfg.dns,
-		MaxBody:      cfg.maxBody,
+		Healthy:       healthy,
+		ListManifest:  set.Manifest,
+		Resolver:      cfg.dns,
+		MaxBody:       cfg.maxBody,
+		ClockOffsetMS: clockMS,
+		ClockSource:   clockSrc,
 	}
 	if err := rw.Write(run); err != nil {
 		log.Printf("write run: %v", err)

@@ -43,6 +43,8 @@ func main() {
 		err = cmdStats(os.Args[2:])
 	case "compare":
 		err = cmdCompare(os.Args[2:])
+	case "health":
+		err = cmdHealth(os.Args[2:])
 	default:
 		usage()
 	}
@@ -62,7 +64,10 @@ func usage() {
   stats [path...]      count rows, verdicts and probe coverage
   compare -slot <run_id> -subject <probe> -control <probe> [path...]
                        join one slot target by target: what failed only from
-                       the subject is what its network did`)
+                       the subject is what its network did
+  health [-stale 45m] [-alert]
+                       is every active probe still writing? exit 1 if not;
+                       -alert sends RNFO_ALERT_URL a message`)
 	os.Exit(2)
 }
 

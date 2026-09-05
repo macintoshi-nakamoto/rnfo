@@ -1,0 +1,39 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+      - name: build
+        run: go build ./...
+      - name: vet
+        run: go vet ./...
+      - name: test
+        run: go test ./...
+      - name: cross-compile for every probe platform
+        run: |
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /dev/null ./probe
+          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o /dev/null ./probe
+          CGO_ENABLED=0 GOOS=linux GOARCH=arm GOARM=7 go build -o /dev/null ./probe
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /dev/null ./responder
+      - name: registry loads
+        run: go run ./collector validate
+      - name: pinned lists match their manifest
+        run: |
+          cd probe/lists
+          python3 - <<'EOF'
+          import hashlib, json
+          m = json.load(open("MANIFEST.json"))
+          for name, meta in m["files"].items():
+              got = hashlib.sha256(open(name, "rb").read()).hexdigest()
+              assert got == meta["sha256"], f"{name}: manifest says {meta['sha256'][:12]}, file is {got[:12]}"
+          print("lists match manifest")
+          EOF

@@ -57,8 +57,8 @@ reset arrived:
   the clear;
 - in the middle of the response body, after tens of kilobytes.
 
-Those are three different filtering mechanisms — address-based, name-based, and
-volume- or content-based — and they are indistinguishable in curl's output. The agent
+Those are three different filtering mechanisms - address-based, name-based, and
+volume- or content-based - and they are indistinguishable in curl's output. The agent
 therefore performs the connection in explicit stages and records:
 
 | Field | Meaning |
@@ -110,7 +110,7 @@ reported, and it is the control's cleanliness score. On the first paired slot:
 | Control | AS | Dedicated | Failed from control only |
 |---|---|---|---|
 | `nl-lim-panel` | AS200823 | no | 7 of 2 824 (0.2 %) |
-| `de-fra-vps` | AS210644 | yes | 262 of 2 824 (9.3 %) — almost all Russian-hosted targets |
+| `de-fra-vps` | AS210644 | yes | 262 of 2 824 (9.3 %) - almost all Russian-hosted targets |
 
 So the two controls have different jobs. `nl-lim-panel` is the primary control for
 every target. `de-fra-vps` is a valid control for the international list only, and for
@@ -164,7 +164,7 @@ another IPv4, and the comparison between them would be meaningless. Every row re
 `ip_family`, and a v4-versus-v6 comparison is a deliberate separate run, never a
 silent difference between machines. A host with no address of the requested family
 produces the verdict `no_address_family`, which is explicitly *not* a blocking
-verdict — mistaking one for the other would manufacture censorship out of a
+verdict - mistaking one for the other would manufacture censorship out of a
 configuration difference.
 
 **ALPN offers `http/1.1` only.** HTTP/2 would introduce a second connection-handling
@@ -175,8 +175,8 @@ observe. The cost is that HTTP/2-only behaviour is invisible to this dataset.
 would be more polite, and it is what a courteous scanner does. It is not what this
 instrument can afford: a middlebox that treats an unknown User-Agent differently
 would bias the measurement away from what a real user experiences. The project
-identifies itself in a different way — through this repository, a published contact
-address, and reverse DNS on the probes — rather than by biasing its own measurement.
+identifies itself in a different way - through this repository, a published contact
+address, and reverse DNS on the probes - rather than by biasing its own measurement.
 See `ETHICS.md`.
 
 **Certificates are fingerprinted, not enforced.** The agent completes the TLS
@@ -194,7 +194,7 @@ received different content for the same URL, and it means the dataset carries no
 third-party content.
 
 **Target order is shuffled per slot with a seed derived from the run id.** The order
-is therefore identical across probes in the same slot — so pairing stays tight — and
+is therefore identical across probes in the same slot - so pairing stays tight - and
 different between slots, so no site is permanently measured first. Without this, every
 result for the first site in the list would be correlated with whatever happens at the
 start of a run.
@@ -215,7 +215,7 @@ The `net` field exists to make pooling them a deliberate act.
 
 ---
 
-## 7. Vantage point independence — the open defect
+## 7. Vantage point independence - the open defect
 
 This section exists because the inventory in the brief and the inventory that exists
 are not the same thing, and the difference determines which questions can be answered.
@@ -225,17 +225,17 @@ Observed on 2026-09-04:
 | Host | Country reported | Autonomous system | Dedicated to this project |
 |---|---|---|---|
 | Moscow VPS | RU, Moscow | AS203273 NetCrafters OU | yes |
-| "Netherlands" panel | NL, Limburg | **AS200823 MHost LLC** | no — production service |
-| "Netherlands" node | NL, Limburg | **AS200823 MHost LLC** | no — production service |
-| "Germany" node | DE, Frankfurt | **AS200823 MHost LLC** | no — production service |
-| "Poland" node | seller says PL, geolocation says LT | **AS200823 MHost LLC** | no — production service |
+| "Netherlands" panel | NL, Limburg | **AS200823 MHost LLC** | no - production service |
+| "Netherlands" node | NL, Limburg | **AS200823 MHost LLC** | no - production service |
+| "Germany" node | DE, Frankfurt | **AS200823 MHost LLC** | no - production service |
+| "Poland" node | seller says PL, geolocation says LT | **AS200823 MHost LLC** | no - production service |
 
 Three consequences.
 
 **The foreign side is one network, not four.** Every foreign machine is in AS200823,
 and three of them share the prefix 103.114.43.0/24. The question the brief calls out
-as important — *does filtering depend on the destination prefix or the destination
-AS?* — has a sample size of one on the AS axis. Three prefixes give a weak test of
+as important - *does filtering depend on the destination prefix or the destination
+AS?* - has a sample size of one on the AS axis. Three prefixes give a weak test of
 the prefix axis and no test at all of the AS axis. No number of additional machines
 at this provider will fix this; it requires a machine at a different provider.
 
@@ -244,8 +244,8 @@ live users. This breaks the "probes are dedicated machines" constraint, and it d
 something worse to the science: a Tier 3 experiment that measures how long a transport
 survives against one of these addresses is not measuring the transport. It is
 measuring an address that already carries that exact transport for real users. The
-result would be uninterpretable, and a positive result — successfully provoking a
-block — would take a production service down.
+result would be uninterpretable, and a positive result - successfully provoking a
+block - would take a production service down.
 
 **The "Poland" machine is not in Poland.** The seller advertises Warsaw. Cloudflare,
 ipinfo and ipwho.is all place it in Lithuania; the whois record says PL and the
@@ -256,7 +256,7 @@ the machine is not used for any claim that depends on location.
 
 ### What was done about it (2026-09-04)
 
-A dedicated VPS was bought in **AS210644**, in Frankfurt — the same city as the
+A dedicated VPS was bought in **AS210644**, in Frankfurt - the same city as the
 project's AS200823 node, so that a comparison between the two destinations holds
 geography roughly constant and varies the network. It carries nothing but the agent and
 the responder. This closes the "no clean host" problem and gives the AS axis a sample
@@ -280,7 +280,7 @@ Three things about it are recorded so nobody over-reads the comparison:
 
 ---
 
-## 8. First controlled results — slot 2026-09-04T18:00Z
+## 8. First controlled results - slot 2026-09-04T18:00Z
 
 Provisional: from `live-` files, one slot, one Russian vantage point on a hosting
 network. Reported here because the methodology should be judged against what it
@@ -307,14 +307,14 @@ category: NEWS 318, ANON 63, HUMR 37, GRP 36, HOST 32, LGBT 32.
 What this does and does not say. It says that from one Russian hosting network, a
 quarter of the standard test list is unreachable in a way that reproduces immediately
 and is overwhelmingly a silent drop during the TLS handshake rather than an injected
-reset. It does not say this is representative of Russia — hosting is not eyeball — and
+reset. It does not say this is representative of Russia - hosting is not eyeball - and
 it does not say the drop is name-based rather than address-based; that is what the SNI
 experiment below is for.
 
 ### 8.2 The second autonomous system, and an inbound finding
 
 The same slot paired against `de-fra-vps` (Frankfurt, AS210644) gives 705 Moscow-only
-failures — consistent with the 712 above — but **262 targets failed only from
+failures - consistent with the 712 above - but **262 targets failed only from
 Frankfurt**, against 7 for the Dutch control. Pairing the two foreign hosts directly:
 266 targets fail from AS210644 and succeed from AS200823, 260 of them `connect_timeout`,
 241 of them on the Russian list.
@@ -325,17 +325,17 @@ destination's firewall (a correction is recorded below):
 | From | To | TCP | ICMP |
 |---|---|---|---|
 | Frankfurt AS210644 | Moscow probe AS203273, port 22 | **dropped** | answers, 38 ms |
-| Frankfurt AS210644 | three Russian sites from the list, port 443 | **dropped** | — |
-| Frankfurt AS210644 | Dutch AS200823 host, port 22 | answers | — |
+| Frankfurt AS210644 | three Russian sites from the list, port 443 | **dropped** | - |
+| Frankfurt AS210644 | Dutch AS200823 host, port 22 | answers | - |
 | Moscow probe AS203273 | Frankfurt AS210644, ports 443 and 22 | **dropped** | answers (11 hops) |
-| Moscow probe AS203273 | AS200823 hosts in Frankfurt and the Netherlands, 443 | answers | — |
-| Dutch AS200823 | Moscow probe, port 22; Frankfurt AS210644, 443 and 22 | answers | — |
-| AS200823 node in Frankfurt | Moscow probe, port 22; Frankfurt AS210644, 443 | answers | — |
+| Moscow probe AS203273 | AS200823 hosts in Frankfurt and the Netherlands, 443 | answers | - |
+| Dutch AS200823 | Moscow probe, port 22; Frankfurt AS210644, 443 and 22 | answers | - |
+| AS200823 node in Frankfurt | Moscow probe, port 22; Frankfurt AS210644, 443 | answers | - |
 
 So TCP between the AS210644 Frankfurt prefix and the Russian networks tested is dead
 **in both directions**, ICMP passes, and the same prefix exchanges TCP with AS200823
 hosts in the same city without trouble. The failures toward Russia spread across 168
-distinct /16 destination networks, with the ten largest holding only 26 % of them —
+distinct /16 destination networks, with the ten largest holding only 26 % of them -
 not the signature of individual sites blocklisting a provider, which would cluster,
 but of a TCP-specific drop on the path between that prefix and Russia. The condition
 predates any experiment of ours: the first full run from Frankfurt, started before the
@@ -354,8 +354,8 @@ source provider's transit toward Russia would both look like this from where we 
 The discriminator is a Russian network that lets the prefix's TCP through: per-operator
 variation is a Russian-side signature, uniform failure is a source-side one. The
 project has exactly one genuine Russian vantage point, so this cannot be settled yet.
-A test from the owner's workstation looked as if it settled it — the Frankfurt host
-answered — until the workstation's egress was checked: it leaves through the owner's
+A test from the owner's workstation looked as if it settled it - the Frankfurt host
+answered - until the workstation's egress was checked: it leaves through the owner's
 own tunnel and exits at an AS200823 node. That result was a measurement of AS200823,
 not of Russia, and it is discarded. It is also the cleanest illustration available of
 the vantage point rule (docs/METHODOLOGY.md §5).
@@ -364,7 +364,36 @@ Consequence for the design: `de-fra-vps` is a valid control for the internationa
 and a subject, not a control, for Russian-hosted targets. `nl-lim-panel` remains the
 primary control.
 
-### 8.3 Same address, different names — inconclusive, and why
+### 8.3 Hosting versus eyeball: the first residential slot
+
+Slot `2026-09-05T12:00Z/full`, the first full run from a residential line
+(`ru-mow-home`, Vimpelcom broadband, AS8402), paired against the Dutch control and
+against the Moscow hosting probe in the same slot.
+
+| Comparison | Failed from subject only |
+|---|---|
+| Moscow hosting vs Dutch control | 715 (25.3 %) |
+| **Home broadband vs Dutch control** | **1 005 (35.5 %)** |
+| Home broadband vs Moscow hosting | 302 (10.7 %) |
+
+So the residential line loses about ten points more of the list than the datacentre
+uplink does, in the same six-hour window. The 302 targets that fail from home but not
+from the Moscow VPS are the eyeball-only component, and its mechanism is not the one
+that dominates from hosting: 217 of the 302 are `response_timeout`, a connection that
+completed the handshake, sent its request, began receiving a response and then
+stalled. From hosting, the dominant mechanism is `tls_timeout`, a drop before any
+application data. 244 of the 302 are on the international list.
+
+What this does and does not say. It is one slot from one household on one operator,
+and a stall can also be congestion or a slow site; the control rules out the site being
+down but not the site being slow for everyone at that hour. It is consistent with
+traffic shaping applied at the subscriber edge rather than at the transit edge, which
+is where the literature places that behaviour, and the stall point (`bytes_read`)
+across many such connections is the measurement that would show it. That analysis is
+next; the number above is reported so the reader can see what the design produces
+before it is polished.
+
+### 8.4 Same address, different names - inconclusive, and why
 
 The responder accepts any server name and returns the same certificate. From the Dutch
 control, all ten names × five rounds completed (50/50 `ok`): outside Russia the name
@@ -384,7 +413,7 @@ blocked until a responder exists on a prefix that Russian networks pass TCP to.
 Two things are kept from this. The Frankfurt host stays where it is as a control for
 the international list and as the *subject* of a continuous measurement: the `own`
 rows from Moscow every fifteen minutes are a longitudinal record of whether the prefix
-block persists, lifts, or changes ports — the kind of series that is only obtainable
+block persists, lifts, or changes ports - the kind of series that is only obtainable
 by leaving an instrument in place. And the SNI experiment is ready to run the moment a
 reachable responder exists; the code and the name rule do not change.
 
@@ -397,7 +426,7 @@ lists, ten connectivity controls, and our own endpoints. It runs four times a da
 probe at fixed UTC slots, with at most twelve concurrent requests and a random delay
 of up to 250 ms before each.
 
-Per target that is one request every six hours from each probe — less traffic than a
+Per target that is one request every six hours from each probe - less traffic than a
 single person opening the page once. The lists are the standard research lists,
 downloaded once and pinned by commit hash and SHA-256 so that any row can be traced to
 the exact target set that produced it. No host outside the pinned lists and our own
@@ -425,8 +454,9 @@ endpoints is ever contacted. No enumeration, no range scanning, no port sweeps.
 1. The foreign side is two autonomous systems, and one of them is not a clean control
    for Russian destinations (sections 7 and 8.2). The AS comparison has a sample size
    of two and shares an upstream between the Russian probe and one foreign host.
-2. One Russian vantage point, on a hosting network, which is the *less* interesting of
-   the two network types.
+2. Two Russian vantage points, one hosting and one residential, on one operator each.
+   Neither is representative of Russia; together they show that the network type
+   matters, which is the point.
 2a. Runs are paired by slot, not synchronised. On 2026-09-04 a Russian full run took
    roughly forty minutes while the control took two, because only the Russian side
    waits out timeouts. Rows join on `(run_id, url)` and the per-row timestamps give the
@@ -442,7 +472,8 @@ endpoints is ever contacted. No enumeration, no range scanning, no port sweeps.
    (section 8.3). Until a responder exists on a reachable prefix, the SNI experiment,
    the volume-trigger experiment and all of Tier 3 are not runnable from Russia.
 8. The owner's workstation is inside the owner's own tunnel and is not a Russian
-   vantage point. No home-broadband measurement exists yet.
+   vantage point. The residential probe is a separate handset, verified to be outside
+   the tunnel from the Moscow probe's connection log.
 9. Clock discipline is verified but not yet monitored. `chrony` on the Moscow probe
    reported an offset of −1.2 ms on 2026-09-04, which is fine for Tier 1 and adequate
    for Tier 2, but there is no alert if it drifts.

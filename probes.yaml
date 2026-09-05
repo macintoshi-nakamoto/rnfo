@@ -80,8 +80,8 @@ probes:
       Not inside the owner's tunnel - measured, not assumed, on 2026-09-05.
       The handset was made to open a connection to the Moscow probe, whose
       sshd logged the source as a Vimpelcom broadband address, reverse
-      its reverse name under broadband.corbina.ru, AS8402. The owner's workstation
-      appears in the same log as an AS200823 node (AS200823, inside the tunnel),
+      DNS under broadband.corbina.ru, AS8402. The owner's workstation
+      appears in the same log from an AS200823 node (inside the tunnel),
       which is the contrast that makes the check conclusive. Re-run it with
       `rnfo-probe -whoami` or by the same log trick after any router change.
 

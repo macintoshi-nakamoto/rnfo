@@ -8,15 +8,19 @@ This is a **measurement** project. It observes and records how networks behave. 
 does not build, ship or document tools for evading network controls, and none are
 present in this repository. See [`docs/ETHICS.md`](docs/ETHICS.md).
 
-**Status: collecting, three vantage points, first paired results.** One Russian
-probe, two foreign controls in two autonomous systems, a responder, all firing on the
-same UTC schedule and sharing run ids. First paired slot: from a Moscow hosting network,
-**25.2 % of the standard test list fails only from Russia, 100 % reproducibly, 84 % of
-it as a silent drop during the TLS handshake.** And the second foreign host produced a
-finding of its own: TCP between its prefix and the Russian networks tested is dead in
-both directions while ICMP passes — which also means the responder on it cannot be
-reached from Moscow, and the SNI experiment is on hold until a reachable one exists.
-Details, the correction of an early wrong claim, and caveats in
+**Status: collecting from four vantage points.** Two inside Russia (a Moscow hosting
+network and a residential broadband line), two foreign controls in two autonomous
+systems, and a responder, all on the same UTC schedule with shared run ids.
+
+First results, provisional. From the Moscow hosting network, **25 % of the standard
+test list fails only from Russia**, in every slot so far, every failure reproducing on
+retry, 84 % of it as a silent drop during the TLS handshake. From the residential line
+the figure is **35 %**, and the extra failures look different: connections that start
+receiving a response and then stall, on the international list. That gap between a
+datacentre uplink and a subscriber line is the project's first real question, and this
+is the first slot that measures it. The second foreign host produced a finding of its
+own: TCP between its prefix and both Russian networks is dead in both directions while
+ICMP passes. Details, the correction of an early wrong claim, and caveats in
 [`docs/METHODOLOGY.md`](docs/METHODOLOGY.md) §8.
 
 ---
@@ -28,8 +32,8 @@ different thing:
 
 - **OONI** collects global web-connectivity data, but does not characterise filtering
   behaviour at the protocol level.
-- **GlobalCheck** runs a volunteer sensor network, but exposes a service — "is site X
-  reachable now" — rather than a downloadable historical dataset.
+- **GlobalCheck** runs a volunteer sensor network, but exposes a service - "is site X
+  reachable now" - rather than a downloadable historical dataset.
 - **blockcheck** classifies blocking type well, and is currently unmaintained.
 - The tooling on ntc.party is excellent, and it is tooling: no control group, no
   confidence intervals, no ethics statement.
@@ -49,8 +53,8 @@ The obvious implementation is a shell script around `curl` and its exit code. Th
 is not, and the reason is the point of the project.
 
 `curl` exit code 56 means "connection reset by peer". It is returned whether the reset
-arrived immediately after the TCP handshake, right after the TLS ClientHello — the
-first packet carrying the server name in the clear — or halfway through the response
+arrived immediately after the TCP handshake, right after the TLS ClientHello - the
+first packet carrying the server name in the clear - or halfway through the response
 body. Those are three different filtering mechanisms and `curl` cannot tell them
 apart.
 
@@ -146,7 +150,7 @@ Listed here rather than in an appendix, because they bound what the data can sup
    probe's registry entry.
 4. **Runs are paired by slot, not synchronised.** A Russian run takes tens of minutes
    because failures wait out their timeouts; a control finishes in two. Rows join on
-   `(run_id, url)` and timestamps give the skew — fine for reachability, not for
+   `(run_id, url)` and timestamps give the skew - fine for reachability, not for
    anything at packet granularity.
 5. **The responder is unreachable by TCP from the Russian probe**, so the SNI
    experiment, Tier 2 packet capture and Tier 3 transports are all waiting on a
@@ -162,7 +166,7 @@ Targets are the public Citizen Lab `global` and `ru` test lists, pinned by commi
 plus endpoints this project owns. Nothing else is ever contacted: no scanning, no
 enumeration. One request per target per probe per six hours. No response bodies are
 stored, only a hash and the page title. No personal data is collected from anyone. The
-probes' own addresses are never written to the dataset — the validator rejects rows
+probes' own addresses are never written to the dataset - the validator rejects rows
 that contain one. Probes on machines the project does not own require recorded consent,
 and the registry loader refuses to mark such a probe active without it. Full statement:
 [`docs/ETHICS.md`](docs/ETHICS.md).
@@ -173,9 +177,13 @@ the repository, so the resulting gap in the data is visible and explained.
 
 ---
 
-## Licence and contact
+## Licence, author, contact
 
-Code and dataset: to be released under an open licence before first publication.
+Code: MIT (`LICENSE`). Data: CC BY 4.0 (`data/LICENSE`). A DOI will be issued for the
+dataset on first release and recorded here.
 
-Contact: *(add a project address here before the repository is made public — the ethics
-statement promises one)*
+Author and maintainer: **freetoshi-nakamoto**.
+
+Contact, including requests to have a host excluded from measurement: open an issue on
+this repository. Exclusion requests are honoured without argument and recorded in
+`docs/CHANGELOG-lists.md`, so the resulting gap in the data is visible and explained.

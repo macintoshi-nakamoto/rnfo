@@ -21,7 +21,7 @@ network filtered everything. Those runs are excluded from analysis.
 ## Deploying or upgrading a probe
 
 One command from the repository root. It builds, uploads, installs the systemd units
-and enables the timers. Idempotent — the same command upgrades an existing probe.
+and enables the timers. Idempotent - the same command upgrades an existing probe.
 
 ```bash
 RNFO_DEPLOY_PASSWORD='...' python tools/deploy.py root@<host> <probe-id> <hosting|eyeball|mobile>
@@ -65,7 +65,7 @@ POCO C51 is the research handset.
 | Handset | Probe | Network | Notes |
 |---|---|---|---|
 | POCO C51 (Android 13 Go, **32-bit userspace**) | `ru-mow-home` | home Wi-Fi, **eyeball**, AS8402 Vimpelcom | live since 2026-09-05; binary is `linux/arm`, not arm64 |
-| — | `ru-mobile` | SIM, Wi-Fi **off** | no handset assigned yet |
+| - | `ru-mobile` | SIM, Wi-Fi **off** | no handset assigned yet |
 
 **Setup through USB instead of Wi-Fi.** The phone need not be reachable over the LAN
 at all. With USB debugging on, `adb forward tcp:8022 tcp:8022` makes Termux's sshd
@@ -94,7 +94,7 @@ says `armv8l`, and an arm64 binary does not execute there. The deploy tool does 
 `/etc/ssl`, so the identity lookup (the thing that writes `asn` into every row) fails
 silently with `identity_unknown` events. `probe.env` sets
 `SSL_CERT_FILE=$PREFIX/etc/tls/cert.pem`. Measurements are unaffected either way,
-because they fingerprint certificates rather than trust them — which is exactly why
+because they fingerprint certificates rather than trust them - which is exactly why
 this took a while to notice.
 
 **Proving the phone is not in the owner's tunnel.** `rnfo-probe -whoami` prints the
@@ -105,7 +105,7 @@ from the AS200823 node, which is the contrast that settles it.
 
 Both: plugged in permanently, nothing installed but Termux, Termux:Boot and Termux:API
 from **F-Droid** (the Play Store builds are dead). **No VPN app on either phone**,
-ever — the vantage point rule (docs/METHODOLOGY.md §5).
+ever - the vantage point rule (docs/METHODOLOGY.md §5).
 
 **Bootstrap, once, by hand in Termux on the phone:**
 
@@ -230,19 +230,28 @@ go build -o bin/rnfo-collect ./collector
 `compare` is the analysis the design exists for: one slot, joined target by target.
 "Failed from subject only" is the only bucket attributable to the subject's network.
 "Failed from control only" is a warning about the control's own address, and if that
-bucket is large the control is not clean for those targets — see the de-fra-vps entry
+bucket is large the control is not clean for those targets - see the de-fra-vps entry
 in `probes.yaml` for a live example.
 
-`pull` fetches only sealed days — a day file with a `.sha256` sidecar, meaning the
-probe has finished writing it — verifies the checksum, and **rejects** any file that
+`pull` fetches only sealed days - a day file with a `.sha256` sidecar, meaning the
+probe has finished writing it - verifies the checksum, and **rejects** any file that
 does not match rather than admitting unverifiable rows.
 
 `validate` exits non-zero if anything is wrong, so it belongs in CI before any
 publication.
 
 **Automated on the workstation.** Windows Task Scheduler runs `tools/pull.cmd` daily
-at 03:30 local as task `RNFO daily pull`: pull, then validate, appending to
-`data/logs/pull.log`. Check it with `schtasks /Query /TN "RNFO daily pull"`; remove it
+at 03:30 local as task `RNFO daily pull`: pull, validate, `health -alert`, then mirror
+the archive to the dedicated foreign host over the `rnfo-archive` ssh alias, appending
+to `data/logs/pull.log`. The archive therefore exists in three places: on each probe
+for 90 days, on the workstation, and on the mirror. It is not in git; publication is a
+separate, versioned release under `data/LICENSE`.
+
+**Health.** `rnfo-collect health` asks every active probe for its newest controls run
+and calls it stale after 45 minutes (three slots). Exit code 1 if anything is stale.
+With `RNFO_ALERT_URL` in `.env` and `-alert`, it sends a message: a URL containing
+`{text}` is fetched with GET (a Telegram bot's `sendMessage` URL works as is); any other
+URL receives a JSON POST `{"text": ...}`. Check it with `schtasks /Query /TN "RNFO daily pull"`; remove it
 with `schtasks /Delete /TN "RNFO daily pull" /F`. Data also accumulates on each probe
 for 90 days, so a workstation that is off for a week loses nothing. A collector on a
 machine that is always up is still the right long-term home; this is the bridge.
@@ -291,7 +300,12 @@ separate precisely so the two are never confused.
 **Everything is `tls_timeout`.** Check the controls first. Domestic controls up and
 international controls down is an upstream problem, not a discovery.
 
-**Clock.** `chronyc tracking` on each probe. Offset must stay in single-digit
+**SSH on the dedicated hosts** is key-only (`/etc/ssh/sshd_config.d/50-rnfo-hardening.conf`:
+no passwords, root by key only, three tries). The panel host keeps its own policy.
+The handset's sshd is reachable only through its reverse tunnel.
+
+**Clock.** Every run record now carries `clock_offset_ms` from one SNTP exchange, so
+drift is visible in the data. `chronyc tracking` on each server probe. Offset must stay in single-digit
 milliseconds or the two-sided captures in Tier 2 cannot be correlated. Hosts running
 `systemd-timesyncd` instead of `chrony` are adequate for Tier 1 and must be switched
 before Tier 2.
@@ -336,8 +350,8 @@ Endpoints:
 | Path | Purpose |
 |---|---|
 | `/v1/health` | liveness |
-| `/v1/echo` | reports what the server received — diff against what was sent to detect rewriting in the path |
-| `/v1/bytes?n=&chunk=&delay=` | emits an exact volume at controlled pacing — this is how the reported ~16 KB cut-off gets measured instead of guessed at |
+| `/v1/echo` | reports what the server received - diff against what was sent to detect rewriting in the path |
+| `/v1/bytes?n=&chunk=&delay=` | emits an exact volume at controlled pacing - this is how the reported ~16 KB cut-off gets measured instead of guessed at |
 
 Connections without the token are counted per port and otherwise discarded. See
 `ETHICS.md` §4.

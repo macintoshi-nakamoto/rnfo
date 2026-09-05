@@ -10,7 +10,7 @@ package schema
 const Version = "v1"
 
 // AgentVersion identifies the binary that produced a record.
-const AgentVersion = "rnfo-probe/0.3.0"
+const AgentVersion = "rnfo-probe/0.4.0"
 
 // Network types a probe can sit on. "hosting" is a datacentre uplink,
 // "eyeball" is a residential subscriber line, "mobile" is a cellular carrier.
@@ -175,6 +175,13 @@ type Run struct {
 	// MaxBody is the per-target body cap the run was configured with. Lowered
 	// on metered links; body_len and body_truncated must be read against it.
 	MaxBody int64 `json:"max_body,omitempty"`
+
+	// ClockOffsetMS is this host's clock minus network time, measured once
+	// per run with a single SNTP exchange. Pairing across probes is a join
+	// on timestamps, so the offset is part of data quality. Absent when the
+	// check could not be made; ClockSource names the server that answered.
+	ClockOffsetMS *float64 `json:"clock_offset_ms,omitempty"`
+	ClockSource   string   `json:"clock_source,omitempty"`
 }
 
 // Event records something that changed about the probe itself rather than

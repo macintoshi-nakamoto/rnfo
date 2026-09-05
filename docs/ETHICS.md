@@ -50,7 +50,7 @@ frequently small, under-resourced, and already scanned by everyone in this field
 adding measurable load to them would be both rude and self-defeating.
 
 **Identification.** The agent sends an ordinary browser User-Agent, because a
-distinctive one would bias the measurement — see `METHODOLOGY.md`, section 5. The
+distinctive one would bias the measurement - see `METHODOLOGY.md`, section 5. The
 project identifies itself instead by being public: this repository, the contact
 address below, and the operator's own registration data on the probe addresses. Any
 operator who wants a probe to stop contacting them can have that, immediately, by
@@ -96,14 +96,14 @@ derived data and code.
 
 The **responder** is reachable by anyone who finds it. It therefore records full
 connection detail only for connections presenting the project token. Every other
-connection increments a per-port counter and is otherwise discarded — no address, no
+connection increments a per-port counter and is otherwise discarded - no address, no
 timestamp, no request. This is enforced in the code, not in policy.
 
 ---
 
 ## 5. Probes on machines the project does not own
 
-Not currently applicable — every probe is operated by the project owner. The rules
+Not currently applicable - every probe is operated by the project owner. The rules
 are stated now because the moment a volunteer offers a vantage point is the wrong
 moment to start writing them.
 

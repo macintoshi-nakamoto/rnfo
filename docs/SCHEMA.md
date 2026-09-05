@@ -46,10 +46,10 @@ One target, from one probe, at one moment.
 | Field | Type | Notes |
 |---|---|---|
 | `schema` | string | `v1` |
-| `run_id` | string | `2026-09-04T18:00Z/full` — the scheduled slot, **identical across probes**, so a Russian row and its foreign control join on `(run_id, url)` |
+| `run_id` | string | `2026-09-04T18:00Z/full` - the scheduled slot, **identical across probes**, so a Russian row and its foreign control join on `(run_id, url)` |
 | `ts` | string | RFC 3339, UTC, milliseconds: `2026-09-04T20:07:33.412Z` |
 | `probe` | string | must exist in `probes.yaml` |
-| `net` | string | `hosting`, `eyeball`, `mobile` — must agree with the registry |
+| `net` | string | `hosting`, `eyeball`, `mobile` - must agree with the registry |
 | `asn` | string | as observed, e.g. `AS203273 NetCrafters OU` |
 | `country`, `region` | string | probe location; never an address |
 | `agent` | string | `rnfo-probe/0.1.0` |
@@ -71,7 +71,7 @@ One target, from one probe, at one moment.
 |---|---|---|
 | `dns_rc` | int | `0` ok, `1` NXDOMAIN, `2` timeout, `3` other |
 | `dns_err` | string | resolver error, when there was one |
-| `dns_ips` | []string | **all** addresses returned, both families — a poisoned answer is visible here even when the connection then succeeds |
+| `dns_ips` | []string | **all** addresses returned, both families - a poisoned answer is visible here even when the connection then succeeds |
 | `remote_ip` | string | the address actually dialled |
 | `ip_family` | string | `v4` or `v6`; fixed per study, see `METHODOLOGY.md` §5 |
 
@@ -94,12 +94,12 @@ how, `curl_rc` is what a curl-based tool would have reported.
 | `dns_nxdomain` | dns | 6 | name does not resolve |
 | `dns_timeout` | dns | 6 | resolver did not answer |
 | `dns_fail` | dns | 6 | resolution failed otherwise |
-| `no_address_family` | dns | 6 | host has no address of the family being measured — **not a block** |
+| `no_address_family` | dns | 6 | host has no address of the family being measured - **not a block** |
 | `connect_refused` | tcp | 7 | RST at connect, or nothing listening |
 | `connect_timeout` | tcp | 28 | SYN silently dropped |
 | `connect_unreachable` | tcp | 7 | no route |
 | `connect_reset` | tcp | 56 | reset during the TCP handshake |
-| `tls_reset` | tls | 35 | reset after the ClientHello — consistent with name-based inspection |
+| `tls_reset` | tls | 35 | reset after the ClientHello - consistent with name-based inspection |
 | `tls_timeout` | tls | 35 | handshake packets silently dropped |
 | `tls_cert_name` | tls | 60 | certificate does not match the requested name |
 | `tls_cert_invalid` | tls | 60 | certificate otherwise invalid |
@@ -125,7 +125,7 @@ how, `curl_rc` is what a curl-based tool would have reported.
 
 ### Timings
 
-Seconds, floating point. **Deltas, not cumulative** — this differs from curl's
+Seconds, floating point. **Deltas, not cumulative** - this differs from curl's
 `time_connect`/`time_appconnect`, which are cumulative from the start of the request.
 
 | Field | Meaning |
@@ -142,7 +142,7 @@ Seconds, floating point. **Deltas, not cumulative** — this differs from curl's
 |---|---|
 | `tls_version`, `tls_cipher`, `tls_alpn` | negotiated parameters |
 | `cert_subject`, `cert_issuer`, `cert_not_after` | leaf certificate |
-| `cert_sha256` | leaf fingerprint — compare across probes in the same slot |
+| `cert_sha256` | leaf fingerprint - compare across probes in the same slot |
 | `cert_name_ok` | whether the leaf matches the requested name |
 
 Reading `cert_name_ok: false` correctly matters. On a row whose verdict is `ok`, it
@@ -180,8 +180,9 @@ Written once per run into `data/runs/`. Distinguished by `"kind": "run"`.
 | `controls_intl_total`, `controls_intl_ok` | the international subset (agent 0.2.0+) |
 | `healthy` | **agent 0.2.0+:** false when half or more of the *international* controls failed. **agent 0.1.0:** judged on all controls. Either way: **analysis must discard the run's measurements**, the probe had no usable network. The `agent` field says which rule applied |
 | `list_manifest` | list name → SHA-256 of the file used, so any row traces to its exact target set |
-| `resolver` | (agent 0.3.0+) DNS server used when it was not the system resolver — set on Termux hosts, where it is the home router; empty on servers. A run using a public resolver measures something different, and this says so |
+| `resolver` | (agent 0.3.0+) DNS server used when it was not the system resolver - set on Termux hosts, where it is the home router; empty on servers. A run using a public resolver measures something different, and this says so |
 | `max_body` | (agent 0.3.0+) the per-target body cap the run was configured with; lowered on metered links. `body_len`/`body_truncated` are read against it |
+| `clock_offset_ms`, `clock_source` | (agent 0.4.0+) this host's clock minus network time from one SNTP exchange per run, and the server that answered. Absent when the check failed. Pairing across probes is a join on timestamps, so this is data quality, not housekeeping |
 
 The run record is what makes downtime data rather than absence. A slot with no
 measurements *and* no run record means the probe was down. A slot with a run record
@@ -195,9 +196,10 @@ Written into `data/runs/`. Distinguished by `"kind": "event"`.
 
 | `type` | Meaning |
 |---|---|
-| `asn_changed` | the uplink moved to a different autonomous system — expected on a dynamic residential line, and it invalidates comparisons across the boundary |
+| `asn_changed` | the uplink moved to a different autonomous system - expected on a dynamic residential line, and it invalidates comparisons across the boundary |
 | `agent_started` | (0.3.0+) the daemon started; on a handset this marks a reboot or an Android kill-and-restart |
 | `run_skipped_overlap` | (0.3.0+) the daemon skipped a slot because the previous run of that profile was still going, as systemd would refuse a second instance |
+| `clock_offset` | (0.4.0+) the clock was more than one second from network time; timestamps in that run carry that error |
 | `identity_unknown` | both geolocation providers were unreachable; the run continued on a cached identity up to three hours old |
 
 ---
@@ -207,5 +209,6 @@ Written into `data/runs/`. Distinguished by `"kind": "event"`.
 | Version | Date | Change |
 |---|---|---|
 | v1 | 2026-09-04 | Initial schema. |
+| v1 (agent 0.4.0) | 2026-09-05 | No field meaning changed. Run record gains optional `clock_offset_ms` and `clock_source`; new event `clock_offset`. Identity is now found by DNS first (a "myip" resolver plus Team Cymru's ASN service), with the HTTPS providers only adding region and city, so a probe on a network that dislikes API hosts, or a handset without a CA store, still names its ASN. `asn_changed` compares AS numbers only, because the two lookup paths spell operator names differently. |
 | v1 (agent 0.3.0) | 2026-09-05 | No field meaning changed. Run record gains optional `resolver` and `max_body`. New event types `agent_started`, `run_skipped_overlap`. Daemon mode for hosts without systemd produces identical records. |
 | v1 (agent 0.2.0) | 2026-09-04 | No field meaning changed. Added `controls_intl_total`/`controls_intl_ok`; `healthy` is now computed from international controls only, because a domestic Russian control (`gosuslugi.ru`) is not obliged to answer a foreign probe and did not. Control categories became `CTRL-RU`/`CTRL-INTL`. New `list` values `own` and `sni`, new `profile` value `sni`. |

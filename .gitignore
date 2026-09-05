@@ -27,3 +27,12 @@ docs/consent/*.pdf
 *.bak
 .DS_Store
 data/logs/
+
+# Local tool settings, not part of the project.
+
+# The archive is pulled here by the collector and mirrored elsewhere. It is not
+# part of the code repository: publication is a separate, versioned release.
+data/**/*.jsonl
+data/**/*.jsonl.sha256
+data/logs/
+__pycache__/

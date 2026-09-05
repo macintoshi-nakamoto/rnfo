@@ -120,10 +120,11 @@ func Errno(err error) string {
 		case errors.Is(se, syscall.EPIPE):
 			return "EPIPE"
 		}
-		return se.Error()
+		// A syscall.Errno that is none of the above. On Windows this is the
+		// normal case: WSAECONNREFUSED and friends are Errno values that do
+		// not compare equal to the Unix constants, so fall through to the
+		// text of the error rather than returning an opaque number.
 	}
-	// Windows returns WSA* codes that do not map onto syscall.Errno the same
-	// way; fall back to string matching so the home probe still classifies.
 	s := strings.ToLower(err.Error())
 	switch {
 	case strings.Contains(s, "reset by peer"), strings.Contains(s, "forcibly closed"):
