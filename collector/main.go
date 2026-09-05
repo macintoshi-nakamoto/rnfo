@@ -275,8 +275,9 @@ func cmdPull(args []string) error {
 			continue
 		}
 		fmt.Printf("==> %s (%s)\n", p.ID, host)
+		dataDir := remoteDataDir(key, host)
 		for _, stream := range []string{"measurements", "runs"} {
-			remote := "/var/lib/rnfo/data/" + stream
+			remote := dataDir + "/" + stream
 			out, err := sshOut(key, host, "ls -1 "+remote+"/*.jsonl.sha256 2>/dev/null || true")
 			if err != nil {
 				fmt.Printf("    %s: %v\n", stream, err)
@@ -347,6 +348,20 @@ func cmdPull(args []string) error {
 		os.Exit(1)
 	}
 	return nil
+}
+
+// remoteDataDir asks the probe where it keeps its data. Servers use
+// /var/lib/rnfo/data; a handset under Termux has no /var and keeps it under
+// $HOME/rnfo/data. The probe's own probe.env is the authority, wherever it is.
+func remoteDataDir(key, host string) string {
+	out, err := sshOut(key, host,
+		`for f in /etc/rnfo/probe.env "$HOME/rnfo/probe.env"; do [ -f "$f" ] && grep -m1 '^RNFO_DATA_DIR=' "$f"; done | head -1 | cut -d= -f2`)
+	if err == nil {
+		if d := strings.TrimSpace(out); d != "" {
+			return d
+		}
+	}
+	return "/var/lib/rnfo/data"
 }
 
 func sshArgs(key, host string) []string {

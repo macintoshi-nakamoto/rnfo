@@ -76,6 +76,14 @@ chmod 0600 "$BASE/probe.env"
 echo "==> boot script (Termux:Boot runs everything in ~/.termux/boot after unlock)"
 install -m 0755 "$SRC/rnfo-boot.sh" "$HOME/.termux/boot/rnfo.sh"
 
+echo "==> recovery hook: opening the Termux app starts everything"
+# Termux sources ~/.bashrc for every interactive shell. If the OS ever blocks
+# Termux:Boot, opening the app by hand becomes a full recovery. Idempotent.
+grep -qF '.termux/boot/rnfo.sh' "$HOME/.bashrc" 2>/dev/null ||   printf '
+# RNFO: (re)start the probe and its tunnel; idempotent
+[ -x "$HOME/.termux/boot/rnfo.sh" ] && "$HOME/.termux/boot/rnfo.sh"
+' >> "$HOME/.bashrc"
+
 echo "==> ssh access (key from the collector)"
 mkdir -p "$HOME/.ssh" && chmod 700 "$HOME/.ssh"
 if [ -f "$SRC/authorized_key" ]; then
