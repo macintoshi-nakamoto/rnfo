@@ -8,6 +8,12 @@
 //   - the run id is derived from the scheduled slot, not from the start time,
 //     so a Russian run and its foreign control share an id and can be paired;
 //   - nothing outside the pinned lists and our own endpoints is ever measured.
+//
+// Two ways to run it. On a host with systemd, timers start one process per
+// run (-profile full|controls) and it exits. On a host without systemd - an
+// Android handset under Termux - the same binary runs as -daemon and keeps its
+// own slot-aligned schedule, so the rows it writes are indistinguishable from
+// the timer-driven ones.
 package main
 
 import (
@@ -18,6 +24,7 @@ import (
 	"io/fs"
 	"log"
 	"math/rand"
+	"net"
 	"net/url"
 	"os"
 	"os/signal"
@@ -50,40 +57,59 @@ var slotPeriod = map[string]time.Duration{
 // nothing and doubles the load on the target list for no information.
 const retryCeiling = 0.40
 
+// config is everything a run needs that does not change between runs.
+type config struct {
+	probeID  string
+	netType  string
+	dataDir  string
+	stateDir string
+	ownFile  string
+	family   string
+	dns      string // "" = system resolver; otherwise host:port of a resolver to use
+	conc     int
+	keepDays int
+	maxBody  int64
+}
+
 func main() {
 	var (
-		probeID  = flag.String("probe", env("RNFO_PROBE_ID", ""), "probe id, must exist in probes.yaml")
-		netType  = flag.String("net", env("RNFO_NET", ""), "network type: hosting, eyeball or mobile")
+		cfg      config
 		profile  = flag.String("profile", "full", "target profile: full or controls")
-		dataDir  = flag.String("data", env("RNFO_DATA_DIR", "/var/lib/rnfo/data"), "data directory")
-		stateDir = flag.String("state", env("RNFO_STATE_DIR", "/var/lib/rnfo/state"), "state directory, never shipped")
-		ownFile  = flag.String("own", env("RNFO_OWN_TARGETS", ""), "optional CSV of our own endpoints")
 		exper    = flag.String("experiment", "", "run a one-off experiment instead of a scheduled measurement: sni")
 		respIP   = flag.String("responder", env("RNFO_RESPONDER_IP", ""), "responder address for -experiment")
 		respPort = flag.String("responder-port", env("RNFO_RESPONDER_PORT", "443"), "responder port for -experiment")
 		repeats  = flag.Int("repeats", 5, "rounds per name in -experiment sni")
-		family   = flag.String("family", env("RNFO_IP_FAMILY", "v4"), "address family to measure over: v4, v6 or auto")
-		conc     = flag.Int("concurrency", envInt("RNFO_CONCURRENCY", 12), "parallel measurements")
-		keepDays = flag.Int("keep-days", envInt("RNFO_KEEP_DAYS", 90), "days of local data to retain")
 		runID    = flag.String("run-id", "", "override the slot-derived run id")
+		daemon   = flag.Bool("daemon", false, "keep running and fire profiles on their slot boundaries (for hosts without systemd)")
+		daemonP  = flag.String("daemon-profiles", env("RNFO_DAEMON_PROFILES", "controls,full"), "profiles the daemon schedules")
 		dryRun   = flag.Bool("dry-run", false, "measure a handful of targets and print rows to stdout")
 		showVer  = flag.Bool("version", false, "print version and exit")
 	)
+	flag.StringVar(&cfg.probeID, "probe", env("RNFO_PROBE_ID", ""), "probe id, must exist in probes.yaml")
+	flag.StringVar(&cfg.netType, "net", env("RNFO_NET", ""), "network type: hosting, eyeball or mobile")
+	flag.StringVar(&cfg.dataDir, "data", env("RNFO_DATA_DIR", "/var/lib/rnfo/data"), "data directory")
+	flag.StringVar(&cfg.stateDir, "state", env("RNFO_STATE_DIR", "/var/lib/rnfo/state"), "state directory, never shipped")
+	flag.StringVar(&cfg.ownFile, "own", env("RNFO_OWN_TARGETS", ""), "optional CSV of our own endpoints")
+	flag.StringVar(&cfg.family, "family", env("RNFO_IP_FAMILY", "v4"), "address family to measure over: v4, v6 or auto")
+	flag.StringVar(&cfg.dns, "dns", env("RNFO_DNS", ""), "resolver host:port to use instead of the system resolver (Termux has no /etc/resolv.conf)")
+	flag.IntVar(&cfg.conc, "concurrency", envInt("RNFO_CONCURRENCY", 12), "parallel measurements")
+	flag.IntVar(&cfg.keepDays, "keep-days", envInt("RNFO_KEEP_DAYS", 90), "days of local data to retain")
+	flag.Int64Var(&cfg.maxBody, "max-body", envInt64("RNFO_MAX_BODY", 2<<20), "bytes of response body to read per target (lower on metered links)")
 	flag.Parse()
 
 	if *showVer {
 		fmt.Println(schema.AgentVersion, "schema", schema.Version)
 		return
 	}
-	if *probeID == "" || *netType == "" {
+	if cfg.probeID == "" || cfg.netType == "" {
 		log.Fatal("probe id and net type are required (-probe, -net or RNFO_PROBE_ID, RNFO_NET)")
 	}
-	switch *family {
+	switch cfg.family {
 	case "v4", "v6", "auto":
 	default:
 		log.Fatal("family must be v4, v6 or auto")
 	}
-	switch *netType {
+	switch cfg.netType {
 	case schema.NetHosting, schema.NetEyeball, schema.NetMobile:
 	default:
 		log.Fatalf("net must be one of %s, %s, %s", schema.NetHosting, schema.NetEyeball, schema.NetMobile)
@@ -91,37 +117,96 @@ func main() {
 	if _, ok := targets.Profiles[*profile]; !ok {
 		log.Fatalf("unknown profile %q", *profile)
 	}
+	if cfg.maxBody < 64<<10 {
+		// Below the hash window the body hash would no longer mean the same
+		// thing across probes. Refuse rather than silently produce it.
+		log.Fatal("max-body must be at least 65536 bytes (the hash window)")
+	}
+	installResolver(cfg.dns)
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	started := time.Now().UTC()
-	slot := *runID
-	if slot == "" {
-		slot = started.Truncate(slotPeriod[*profile]).Format("2006-01-02T15:04Z") + "/" + *profile
-	}
-
-	// Identity first: a run whose network we cannot name is still worth
-	// having, but the ambiguity must be recorded rather than guessed at.
-	id, prev, fresh := identity.Resolve(ctx, *stateDir)
-
-	if *exper != "" {
+	switch {
+	case *exper != "":
 		if *exper != "sni" {
 			log.Fatalf("unknown experiment %q", *exper)
 		}
 		if *respIP == "" {
 			log.Fatal("-responder <ip> is required for -experiment sni")
 		}
-		runSNI(ctx, sniArgs{
-			probeID: *probeID, netType: *netType, family: *family,
-			dataDir: *dataDir, ip: *respIP, port: *respPort,
-			repeats: *repeats, started: started, runID: *runID,
-			asn: id.ASN, country: id.Country, region: id.Region,
-		})
+		runSNI(ctx, cfg, *respIP, *respPort, *repeats, *runID)
+		return
+
+	case *dryRun:
+		set := loadSet(cfg, *profile)
+		set.Order("dry-run")
+		runDry(ctx, set, 8, cfg)
+		return
+
+	case *daemon:
+		var profiles []string
+		for _, p := range strings.Split(*daemonP, ",") {
+			if p = strings.TrimSpace(p); p != "" {
+				if _, ok := targets.Profiles[p]; !ok {
+					log.Fatalf("unknown daemon profile %q", p)
+				}
+				profiles = append(profiles, p)
+			}
+		}
+		runDaemon(ctx, cfg, profiles)
 		return
 	}
 
-	own, err := loadOwn(*ownFile)
+	mw, rw := openWriters(cfg)
+	defer mw.Close()
+	defer rw.Close()
+	if !runOnce(ctx, cfg, *profile, *runID, mw, rw) {
+		// Exit non-zero so systemd marks the unit failed and the outage is
+		// visible in the journal as well as in the data.
+		os.Exit(3)
+	}
+}
+
+// installResolver replaces the process resolver when -dns is given.
+//
+// Why this exists: a static Go binary resolves names by reading
+// /etc/resolv.conf. Termux on Android has no such file and no way to create
+// one without root, so the default resolver silently points at localhost and
+// every lookup fails. Pointing at the home router keeps the ISP's resolver in
+// the path, which is what an eyeball measurement should see; pointing at a
+// public resolver would change what is being measured, and the run record
+// says which was used.
+func installResolver(addr string) {
+	if addr == "" {
+		return
+	}
+	if _, _, err := net.SplitHostPort(addr); err != nil {
+		addr = net.JoinHostPort(addr, "53")
+	}
+	net.DefaultResolver = &net.Resolver{
+		PreferGo: true,
+		Dial: func(ctx context.Context, network, _ string) (net.Conn, error) {
+			d := net.Dialer{Timeout: 5 * time.Second}
+			return d.DialContext(ctx, network, addr)
+		},
+	}
+}
+
+func openWriters(cfg config) (*jsonl.Writer, *jsonl.Writer) {
+	mw, err := jsonl.New(cfg.dataDir, "measurements")
+	if err != nil {
+		log.Fatalf("open measurements: %v", err)
+	}
+	rw, err := jsonl.New(cfg.dataDir, "runs")
+	if err != nil {
+		log.Fatalf("open runs: %v", err)
+	}
+	return mw, rw
+}
+
+func loadSet(cfg config, profile string) *targets.Set {
+	own, err := loadOwn(cfg.ownFile)
 	if err != nil {
 		log.Fatalf("own targets: %v", err)
 	}
@@ -129,33 +214,39 @@ func main() {
 	if err != nil {
 		log.Fatalf("lists: %v", err)
 	}
-	set, err := targets.Load(sub, *profile, own)
+	set, err := targets.Load(sub, profile, own)
 	if err != nil {
 		log.Fatalf("targets: %v", err)
 	}
+	return set
+}
+
+func slotID(t time.Time, profile string) string {
+	return t.UTC().Truncate(slotPeriod[profile]).Format("2006-01-02T15:04Z") + "/" + profile
+}
+
+// runOnce performs one scheduled measurement of one profile and returns
+// whether the probe was healthy for it. It is the unit of work for both the
+// systemd path and the daemon path, so the two produce identical records.
+func runOnce(ctx context.Context, cfg config, profile, runID string, mw, rw *jsonl.Writer) bool {
+	started := time.Now().UTC()
+	slot := runID
+	if slot == "" {
+		slot = slotID(started, profile)
+	}
+
+	// Identity first: a run whose network we cannot name is still worth
+	// having, but the ambiguity must be recorded rather than guessed at.
+	id, prev, fresh := identity.Resolve(ctx, cfg.stateDir)
+
+	set := loadSet(cfg, profile)
 	set.Order(slot)
-
-	if *dryRun {
-		runDry(ctx, set, 8, *family)
-		return
-	}
-
-	mw, err := jsonl.New(*dataDir, "measurements")
-	if err != nil {
-		log.Fatalf("open measurements: %v", err)
-	}
-	defer mw.Close()
-	rw, err := jsonl.New(*dataDir, "runs")
-	if err != nil {
-		log.Fatalf("open runs: %v", err)
-	}
-	defer rw.Close()
 
 	writeEvent := func(typ, from, to, note string) {
 		_ = rw.Write(schema.Event{
 			Schema: schema.Version, Kind: "event",
 			TS:    time.Now().UTC().Format("2006-01-02T15:04:05.000Z"),
-			Probe: *probeID, Type: typ, From: from, To: to, Note: note,
+			Probe: cfg.probeID, Type: typ, From: from, To: to, Note: note,
 		})
 	}
 	if identity.Changed(prev, id) {
@@ -167,9 +258,9 @@ func main() {
 
 	stamp := func(m *schema.Measurement, t targets.Target, attempt int) {
 		m.RunID, m.TS = slot, time.Now().UTC().Format("2006-01-02T15:04:05.000Z")
-		m.Probe, m.Net = *probeID, *netType
+		m.Probe, m.Net = cfg.probeID, cfg.netType
 		m.ASN, m.Country, m.Region = id.ASN, id.Country, id.Region
-		m.Profile, m.List, m.Category = *profile, t.List, t.Category
+		m.Profile, m.List, m.Category = profile, t.List, t.Category
 		m.Target, m.Attempt = t.Host, attempt
 	}
 
@@ -203,9 +294,10 @@ func main() {
 	}
 
 	opts := tests.DefaultOptions()
-	opts.Family = *family
+	opts.Family = cfg.family
+	opts.MaxBody = cfg.maxBody
 	measure := func(list []targets.Target, attempt int) {
-		sem := make(chan struct{}, *conc)
+		sem := make(chan struct{}, cfg.conc)
 		var wg sync.WaitGroup
 		for _, t := range list {
 			if ctx.Err() != nil {
@@ -229,7 +321,7 @@ func main() {
 
 	ctrlTotal, ctrlIntlTotal := set.Controls()
 	log.Printf("run %s: %d targets (%d controls, %d of them international), probe %s on %s",
-		slot, len(set.Targets), ctrlTotal, ctrlIntlTotal, *probeID, id)
+		slot, len(set.Targets), ctrlTotal, ctrlIntlTotal, cfg.probeID, id)
 	measure(set.Targets, 1)
 
 	// Second pass: a single confirmation retry, only for what failed, and only
@@ -249,9 +341,9 @@ func main() {
 	healthy := ctrlIntlTotal == 0 || float64(ctrlIntlOK) >= 0.5*float64(ctrlIntlTotal)
 	run := schema.Run{
 		Schema: schema.Version, Kind: "run", RunID: slot,
-		Probe: *probeID, Net: *netType,
+		Probe: cfg.probeID, Net: cfg.netType,
 		ASN: id.ASN, Country: id.Country, Region: id.Region,
-		Agent: schema.AgentVersion, Profile: *profile,
+		Agent: schema.AgentVersion, Profile: profile,
 		StartedAt:  started.Format("2006-01-02T15:04:05.000Z"),
 		FinishedAt: finished.Format("2006-01-02T15:04:05.000Z"),
 		DurationS:  finished.Sub(started).Seconds(),
@@ -261,74 +353,55 @@ func main() {
 		ControlsIntlTotal: ctrlIntlTotal, ControlsIntlOK: ctrlIntlOK,
 		Healthy:      healthy,
 		ListManifest: set.Manifest,
+		Resolver:     cfg.dns,
+		MaxBody:      cfg.maxBody,
 	}
 	if err := rw.Write(run); err != nil {
 		log.Printf("write run: %v", err)
 	}
 
-	if n, _ := jsonl.Seal(*dataDir); n > 0 {
+	if n, _ := jsonl.Seal(cfg.dataDir); n > 0 {
 		log.Printf("sealed %d finished day file(s)", n)
 	}
-	if n, _ := jsonl.Prune(*dataDir, *keepDays); n > 0 {
-		log.Printf("pruned %d file(s) older than %d days", n, *keepDays)
+	if n, _ := jsonl.Prune(cfg.dataDir, cfg.keepDays); n > 0 {
+		log.Printf("pruned %d file(s) older than %d days", n, cfg.keepDays)
 	}
 
 	log.Printf("run %s done in %.0fs: %d rows, %d ok, %d failed, %d retried, controls %d/%d (intl %d/%d), healthy=%v",
 		slot, run.DurationS, rows, ok, run.Failed, retried, ctrlOK, ctrlTotal, ctrlIntlOK, ctrlIntlTotal, healthy)
-	if !healthy {
-		// Exit non-zero so systemd marks the unit failed and the outage is
-		// visible in the journal as well as in the data.
-		os.Exit(3)
-	}
-}
-
-type sniArgs struct {
-	probeID, netType, family string
-	dataDir, ip, port        string
-	runID                    string
-	repeats                  int
-	started                  time.Time
-	asn, country, region     string
+	return healthy
 }
 
 // runSNI drives the same-address-different-name experiment and writes its rows
-// into the ordinary measurement stream, tagged list "sni".
-//
-// The run id is the wall-clock minute rather than a six-hour slot: this is a
-// manually driven experiment, and two probes running it are expected to be
-// started together by hand. Pass the same -run-id on both to force a join.
-func runSNI(ctx context.Context, a sniArgs) {
-	mw, err := jsonl.New(a.dataDir, "measurements")
-	if err != nil {
-		log.Fatalf("open measurements: %v", err)
-	}
+// into the ordinary measurement stream, tagged list "sni", as each completes.
+func runSNI(ctx context.Context, cfg config, ip, port string, repeats int, runID string) {
+	mw, rw := openWriters(cfg)
 	defer mw.Close()
-	rw, err := jsonl.New(a.dataDir, "runs")
-	if err != nil {
-		log.Fatalf("open runs: %v", err)
-	}
 	defer rw.Close()
+
+	started := time.Now().UTC()
+	id, _, _ := identity.Resolve(ctx, cfg.stateDir)
 
 	// Truncated to fifteen minutes so two probes started by hand within the
 	// same quarter hour share an id and their rows join. -run-id overrides it
 	// when an exact pairing is wanted.
-	runID := a.runID
 	if runID == "" {
-		runID = a.started.Truncate(15*time.Minute).Format("2006-01-02T15:04Z") + "/sni"
+		runID = started.Truncate(15*time.Minute).Format("2006-01-02T15:04Z") + "/sni"
 	}
 	opts := tests.DefaultOptions()
-	opts.Family = a.family
+	opts.Family = cfg.family
+	opts.MaxBody = cfg.maxBody
 
 	log.Printf("run %s: sni experiment against %s:%s, %d names x %d rounds, probe %s",
-		runID, a.ip, a.port, len(tests.DefaultSNITrials), a.repeats, a.probeID)
+		runID, ip, port, len(tests.DefaultSNITrials), repeats, cfg.probeID)
 
 	byVerdict := map[string]int{}
 	ok := 0
 	emit := func(m *schema.Measurement) {
 		m.RunID = runID
 		m.TS = time.Now().UTC().Format("2006-01-02T15:04:05.000Z")
-		m.Probe, m.Net = a.probeID, a.netType
-		m.ASN, m.Country, m.Region = a.asn, a.country, a.region
+		m.Probe, m.Net = cfg.probeID, cfg.netType
+		m.ASN, m.Country, m.Region = id.ASN, id.Country, id.Region
 		m.Profile = "sni"
 		byVerdict[m.Verdict]++
 		if m.Verdict == classify.VOK {
@@ -339,28 +412,28 @@ func runSNI(ctx context.Context, a sniArgs) {
 		}
 		log.Printf("  %-26s round %d  %s", m.Target, m.Attempt, m.Verdict)
 	}
-	rows := tests.SNIExperiment(ctx, a.ip, a.port, a.repeats, tests.DefaultSNITrials, opts, emit)
+	rows := tests.SNIExperiment(ctx, ip, port, repeats, tests.DefaultSNITrials, opts, emit)
 
 	finished := time.Now().UTC()
 	_ = rw.Write(schema.Run{
 		Schema: schema.Version, Kind: "run", RunID: runID,
-		Probe: a.probeID, Net: a.netType,
-		ASN: a.asn, Country: a.country, Region: a.region,
+		Probe: cfg.probeID, Net: cfg.netType,
+		ASN: id.ASN, Country: id.Country, Region: id.Region,
 		Agent: schema.AgentVersion, Profile: "sni",
-		StartedAt:  a.started.Format("2006-01-02T15:04:05.000Z"),
+		StartedAt:  started.Format("2006-01-02T15:04:05.000Z"),
 		FinishedAt: finished.Format("2006-01-02T15:04:05.000Z"),
-		DurationS:  finished.Sub(a.started).Seconds(),
+		DurationS:  finished.Sub(started).Seconds(),
 		Targets:    len(tests.DefaultSNITrials), Rows: len(rows), OK: ok, Failed: len(rows) - ok,
 		ByVerdict: byVerdict,
 		// No connectivity controls in this experiment: it targets a single
 		// address we own, so a control set measuring other hosts would say
 		// nothing about whether this particular tuple was reachable.
-		Healthy: true,
+		Healthy:  true,
+		Resolver: cfg.dns,
+		MaxBody:  cfg.maxBody,
 	})
 
-	// A compact summary on stdout, because this experiment is read by a human
-	// the moment it finishes, not only from the archive.
-	log.Printf("run %s done in %.0fs", runID, finished.Sub(a.started).Seconds())
+	log.Printf("run %s done in %.0fs", runID, finished.Sub(started).Seconds())
 	agg := map[string]map[string]int{}
 	for _, m := range rows {
 		if agg[m.Target] == nil {
@@ -383,9 +456,10 @@ func runSNI(ctx context.Context, a sniArgs) {
 	}
 }
 
-func runDry(ctx context.Context, set *targets.Set, n int, family string) {
+func runDry(ctx context.Context, set *targets.Set, n int, cfg config) {
 	opts := tests.DefaultOptions()
-	opts.Family = family
+	opts.Family = cfg.family
+	opts.MaxBody = cfg.maxBody
 	if n > len(set.Targets) {
 		n = len(set.Targets)
 	}
@@ -443,6 +517,13 @@ func env(k, def string) string {
 
 func envInt(k string, def int) int {
 	if v, err := strconv.Atoi(os.Getenv(k)); err == nil && v > 0 {
+		return v
+	}
+	return def
+}
+
+func envInt64(k string, def int64) int64 {
+	if v, err := strconv.ParseInt(os.Getenv(k), 10, 64); err == nil && v > 0 {
 		return v
 	}
 	return def

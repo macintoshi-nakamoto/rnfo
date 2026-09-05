@@ -10,7 +10,7 @@ package schema
 const Version = "v1"
 
 // AgentVersion identifies the binary that produced a record.
-const AgentVersion = "rnfo-probe/0.2.1"
+const AgentVersion = "rnfo-probe/0.3.0"
 
 // Network types a probe can sit on. "hosting" is a datacentre uplink,
 // "eyeball" is a residential subscriber line, "mobile" is a cellular carrier.
@@ -164,6 +164,17 @@ type Run struct {
 	Healthy           bool `json:"healthy"`
 
 	ListManifest map[string]string `json:"list_manifest"` // list file -> sha256, so a row can always be traced to the exact target set
+
+	// Resolver is the DNS server the run used when it was not the system
+	// resolver (empty otherwise). Set on hosts without /etc/resolv.conf, such
+	// as Android under Termux, where it points at the home router so that the
+	// ISP's resolver stays in the path. A run that used a public resolver is
+	// measuring something different, and this field says so.
+	Resolver string `json:"resolver,omitempty"`
+
+	// MaxBody is the per-target body cap the run was configured with. Lowered
+	// on metered links; body_len and body_truncated must be read against it.
+	MaxBody int64 `json:"max_body,omitempty"`
 }
 
 // Event records something that changed about the probe itself rather than

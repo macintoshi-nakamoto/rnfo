@@ -51,6 +51,74 @@ correction is reversible.
 
 ---
 
+## Handsets (Termux): the eyeball and mobile probes
+
+Android has no systemd, so on a handset the same binary runs as `rnfo-probe -daemon`
+and keeps its own slot-aligned schedule (00/06/12/18 UTC for `full`, every quarter
+hour for `controls`, catch-up on start like `Persistent=true`, no self-overlap). The
+rows are indistinguishable from timer-driven ones; the run record's `agent` and an
+`agent_started` event mark the daemon.
+
+**Which phone does what.** The more reliable device carries the more valuable probe:
+
+| Handset | Probe | Network | Why |
+|---|---|---|---|
+| realme Note 60 (Android 14, 5 000 mAh) | `ru-mow-home` | home Wi-Fi, **eyeball** | full Android, gentler background killing; this is the vantage point TSPU actually sits in front of |
+| POCO C51 (Android 13 Go) | `ru-mobile` | SIM, Wi-Fi **off**, **mobile** | Go edition kills background processes hardest; acceptable for the second-priority probe |
+
+Both: plugged in permanently, nothing installed but Termux, Termux:Boot and Termux:API
+from **F-Droid** (the Play Store builds are dead). **No VPN app on either phone**,
+ever — the vantage point rule (docs/METHODOLOGY.md §5).
+
+**Bootstrap, once, by hand in Termux on the phone:**
+
+```bash
+pkg update && pkg install -y openssh && passwd && sshd && ip addr | grep 'inet 192'
+```
+
+Then from the workstation on the same Wi-Fi (the tool refuses to proceed if the
+phone's traffic leaves through AS200823, i.e. through the owner's tunnel):
+
+```bash
+RNFO_DEPLOY_PASSWORD='<passwd you set>' python tools/deploy_termux.py <phone-ip> ru-mow-home eyeball
+RNFO_DEPLOY_PASSWORD='<passwd you set>' python tools/deploy_termux.py <phone-ip> ru-mobile  mobile --max-body 262144
+```
+
+The tool detects the CPU (arm64 expected), builds, uploads, writes `~/rnfo/probe.env`
+and `~/rnfo/own.csv`, installs `~/.termux/boot/rnfo.sh`, puts the collector's key in
+`authorized_keys`, and starts the daemon. After it, **by hand on the phone**, or Android
+will kill everything within hours: Settings → Apps → Termux, Termux:Boot, Termux:API →
+Battery → Unrestricted; open Termux:Boot once; Wi-Fi "keep on during sleep".
+
+**DNS.** A static binary reads `/etc/resolv.conf`; Termux has none. The agent is
+started with `RNFO_DNS` = the home router (detected as the default gateway), which
+keeps the ISP's resolver in the path. On the SIM phone the carrier resolver is taken
+from `getprop net.dns1` if present; otherwise pass `--dns`. Whatever was used is in
+every run record as `resolver`.
+
+**Metered SIM.** `--max-body 262144` caps the body read at 256 KiB per target (the
+hash window is 64 KiB, so hashes stay comparable). At four full runs a day this is on
+the order of a few hundred MB/day worst case; check the carrier plan. The cap is in the
+run record as `max_body`.
+
+**Checking a phone:**
+
+```bash
+ssh -p 8022 <phone-ip> 'tail -3 ~/rnfo/daemon.log; cat ~/rnfo/state/daemon.json; tail -1 ~/rnfo/data/runs/$(date -u +%F).jsonl'
+```
+
+**Collecting from a phone.** Over the LAN it is `RNFO_SSH_ru_mow_home=<user>@<phone-ip>`
+with port 8022 — add `-p 8022` support or an `ssh_config` `Host` entry. From outside
+the LAN the phone is behind NAT (and the SIM behind carrier NAT): the plan is a
+reverse SSH tunnel from the phone to the Moscow VPS with a forwarding-only key, so the
+collector keeps pulling and the phone still holds no credential to the archive. Not
+built yet.
+
+**Clock.** Android network time is good to seconds, not milliseconds. Fine for Tier 1;
+the handsets are not Tier 2 capture points.
+
+---
+
 ## Schedule
 
 | Timer | When (UTC) | Targets |
@@ -144,6 +212,11 @@ added without a rebuild.
 ---
 
 ## Troubleshooting
+
+**A phone stops reporting after a few hours.** Android killed Termux. Battery
+optimisation was not disabled for Termux / Termux:Boot / Termux:API, or the wake lock
+is missing (Termux:API not installed). The gap is in the data as missing slots; the
+`agent_started` event marks the restart.
 
 **`controls_intl_*` is null in a run record.** The run was written by agent 0.1.0,
 before the international-only health rule. Its `healthy` was judged on all ten

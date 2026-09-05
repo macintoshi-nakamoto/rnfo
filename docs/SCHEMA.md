@@ -180,6 +180,8 @@ Written once per run into `data/runs/`. Distinguished by `"kind": "run"`.
 | `controls_intl_total`, `controls_intl_ok` | the international subset (agent 0.2.0+) |
 | `healthy` | **agent 0.2.0+:** false when half or more of the *international* controls failed. **agent 0.1.0:** judged on all controls. Either way: **analysis must discard the run's measurements**, the probe had no usable network. The `agent` field says which rule applied |
 | `list_manifest` | list name → SHA-256 of the file used, so any row traces to its exact target set |
+| `resolver` | (agent 0.3.0+) DNS server used when it was not the system resolver — set on Termux hosts, where it is the home router; empty on servers. A run using a public resolver measures something different, and this says so |
+| `max_body` | (agent 0.3.0+) the per-target body cap the run was configured with; lowered on metered links. `body_len`/`body_truncated` are read against it |
 
 The run record is what makes downtime data rather than absence. A slot with no
 measurements *and* no run record means the probe was down. A slot with a run record
@@ -194,6 +196,8 @@ Written into `data/runs/`. Distinguished by `"kind": "event"`.
 | `type` | Meaning |
 |---|---|
 | `asn_changed` | the uplink moved to a different autonomous system — expected on a dynamic residential line, and it invalidates comparisons across the boundary |
+| `agent_started` | (0.3.0+) the daemon started; on a handset this marks a reboot or an Android kill-and-restart |
+| `run_skipped_overlap` | (0.3.0+) the daemon skipped a slot because the previous run of that profile was still going, as systemd would refuse a second instance |
 | `identity_unknown` | both geolocation providers were unreachable; the run continued on a cached identity up to three hours old |
 
 ---
@@ -203,4 +207,5 @@ Written into `data/runs/`. Distinguished by `"kind": "event"`.
 | Version | Date | Change |
 |---|---|---|
 | v1 | 2026-09-04 | Initial schema. |
+| v1 (agent 0.3.0) | 2026-09-05 | No field meaning changed. Run record gains optional `resolver` and `max_body`. New event types `agent_started`, `run_skipped_overlap`. Daemon mode for hosts without systemd produces identical records. |
 | v1 (agent 0.2.0) | 2026-09-04 | No field meaning changed. Added `controls_intl_total`/`controls_intl_ok`; `healthy` is now computed from international controls only, because a domestic Russian control (`gosuslugi.ru`) is not obliged to answer a foreign probe and did not. Control categories became `CTRL-RU`/`CTRL-INTL`. New `list` values `own` and `sni`, new `profile` value `sni`. |

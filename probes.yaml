@@ -66,13 +66,20 @@ probes:
     operator: unknown
     uplink: broadband
     consent: owner
-    dedicated: false
+    dedicated: true
+    device: realme Note 60 (Unisoc T612, Android 14), Termux, agent in -daemon mode
+    clock: android-nitz
     notes: >
       The residential vantage point, and the scientifically important one.
-      Blocked on two conditions before it may be activated: the measuring host
-      must not send its traffic through the operator's own AmneziaWG tunnel
-      (the vantage point rule (docs/METHODOLOGY.md §5), otherwise we measure our own VPN), and the
-      address is dynamic, so an ASN change is an event and must be logged.
+      Runs on a dedicated handset on the home Wi-Fi, plugged in, nothing else
+      on it. Two conditions before activation: the handset's traffic must not
+      pass through the owner's own tunnel (the vantage point rule (docs/METHODOLOGY.md §5); verified by
+      checking the handset's egress ASN is a Russian ISP, not AS200823), and
+      the address is dynamic, so an ASN change is an event and is logged.
+      Android has no /etc/resolv.conf, so the agent is pointed at the home
+      router as resolver, which keeps the ISP's DNS in the path; the run
+      record carries the resolver used. Clock is Android's network time, good
+      to seconds, not milliseconds.
 
   - id: ru-mobile
     role: probe
@@ -84,10 +91,18 @@ probes:
     uplink: cellular
     consent: owner
     dedicated: true
+    device: POCO C51 (Helio G36, Android 13 Go), Termux, agent in -daemon mode
+    clock: android-nitz
     notes: >
-      Old Android with Termux, not yet acquired. Same agent binary, built for
-      linux/arm64. Carrier NAT reduces the observed TTL by at least one hop,
-      which must be calibrated before any TTL analysis in Tier 2.
+      Dedicated handset on a SIM with Wi-Fi switched off, so every row is a
+      cellular measurement. Same binary as every other probe, built for
+      linux/arm64, scheduled by the agent's own daemon mode because there is
+      no systemd. Body cap lowered (max_body in the run record) because the
+      link is metered. Carrier NAT reduces the observed TTL by at least one
+      hop, which must be calibrated before any TTL analysis in Tier 2. Android
+      Go kills background processes aggressively; Termux:Boot, a wake lock and
+      battery optimisation disabled for Termux are required, and gaps in the
+      run records will show whether that was enough.
 
   # ---------------------------------------------------------------------
   # Foreign side. Two autonomous systems are now available, which is the
