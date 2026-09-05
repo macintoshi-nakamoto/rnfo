@@ -5,13 +5,15 @@
 # $HOME/rnfo. There is no systemd, so the agent runs in -daemon mode and keeps
 # its own slot-aligned schedule; Termux:Boot starts it after a reboot.
 #
-# Usage: install.sh <probe-id> <eyeball|mobile> <dns host[:port]> <max-body-bytes>
+# Usage: install.sh <probe-id> <eyeball|mobile> <dns host[:port]> <max-body-bytes> [tunnel user@host] [tunnel port]
 set -euo pipefail
 
 PROBE_ID="${1:?usage: install.sh <probe-id> <eyeball|mobile> <dns> <max-body>}"
 NET_TYPE="${2:?}"
 DNS="${3:?dns resolver is required: Android has no /etc/resolv.conf}"
 MAX_BODY="${4:-2097152}"
+TUNNEL_HOST="${5:-}"
+TUNNEL_PORT="${6:-}"
 
 case "$NET_TYPE" in
   eyeball|mobile) ;;
@@ -49,7 +51,26 @@ RNFO_KEEP_DAYS=90
 RNFO_DNS=$DNS
 # Body cap per target. Lowered on a metered SIM. Recorded per run.
 RNFO_MAX_BODY=$MAX_BODY
+# Go verifies TLS against the system CA store, and Termux has no /etc/ssl.
+# Without this the identity lookup fails and the probe cannot name its ASN.
+# Measurements are unaffected (they fingerprint certificates, not trust them).
+SSL_CERT_FILE=$PREFIX/etc/tls/cert.pem
+# Reverse tunnel to the collector's jump host, so a phone behind NAT can be
+# pulled from. Forwarding-only key; the phone can bind one loopback port there
+# and nothing else.
+RNFO_TUNNEL_HOST=$TUNNEL_HOST
+RNFO_TUNNEL_PORT=$TUNNEL_PORT
+RNFO_TUNNEL_KEY=$HOME/.ssh/rnfo_tunnel
 EOF
+[ -f "$PREFIX/etc/tls/cert.pem" ] || pkg install -y ca-certificates >/dev/null 2>&1 || true
+
+echo "==> tunnel key"
+mkdir -p "$HOME/.ssh" && chmod 700 "$HOME/.ssh"
+if [ ! -f "$HOME/.ssh/rnfo_tunnel" ]; then
+  ssh-keygen -q -t ed25519 -N "" -C "rnfo-tunnel@$PROBE_ID" -f "$HOME/.ssh/rnfo_tunnel"
+fi
+echo "    public key (authorize it on the jump host with restrict,port-forwarding,permitlisten):"
+echo "    $(cat "$HOME/.ssh/rnfo_tunnel.pub")"
 chmod 0600 "$BASE/probe.env"
 
 echo "==> boot script (Termux:Boot runs everything in ~/.termux/boot after unlock)"

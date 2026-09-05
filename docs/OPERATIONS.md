@@ -59,12 +59,49 @@ hour for `controls`, catch-up on start like `Persistent=true`, no self-overlap).
 rows are indistinguishable from timer-driven ones; the run record's `agent` and an
 `agent_started` event mark the daemon.
 
-**Which phone does what.** The more reliable device carries the more valuable probe:
+**What runs where.** The owner kept the realme Note 60 as a personal phone; the
+POCO C51 is the research handset.
 
-| Handset | Probe | Network | Why |
+| Handset | Probe | Network | Notes |
 |---|---|---|---|
-| realme Note 60 (Android 14, 5 000 mAh) | `ru-mow-home` | home Wi-Fi, **eyeball** | full Android, gentler background killing; this is the vantage point TSPU actually sits in front of |
-| POCO C51 (Android 13 Go) | `ru-mobile` | SIM, Wi-Fi **off**, **mobile** | Go edition kills background processes hardest; acceptable for the second-priority probe |
+| POCO C51 (Android 13 Go, **32-bit userspace**) | `ru-mow-home` | home Wi-Fi, **eyeball**, AS8402 Vimpelcom | live since 2026-09-05; binary is `linux/arm`, not arm64 |
+| — | `ru-mobile` | SIM, Wi-Fi **off** | no handset assigned yet |
+
+**Setup through USB instead of Wi-Fi.** The phone need not be reachable over the LAN
+at all. With USB debugging on, `adb forward tcp:8022 tcp:8022` makes Termux's sshd
+appear on the workstation as `127.0.0.1:8022`, and the deploy tool is pointed there
+with `--lan-ip <phone's Wi-Fi address>` so it can still guess the router. ADB also
+does the battery work the UI would otherwise need by hand:
+
+```powershell
+$adb = "$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe"; $s = "<serial from adb devices>"
+& $adb forward tcp:8022 tcp:8022
+foreach ($p in "com.termux","com.termux.boot","com.termux.api") {
+  & $adb -s $s shell "dumpsys deviceidle whitelist +$p; cmd appops set $p RUN_ANY_IN_BACKGROUND allow"
+}
+& $adb -s $s shell "monkey -p com.termux.boot -c android.intent.category.LAUNCHER 1"   # Termux:Boot must be opened once
+```
+
+Run ADB from PowerShell, not Git Bash: Git Bash rewrites `/data/local/tmp` into a
+Windows path and every adb argument breaks. If `adb` says "more than one device", an
+emulator is running; pass `-s <serial>`.
+
+**Architecture.** Ask Termux, not the CPU: `dpkg --print-architecture`. Budget phones
+ship a 32-bit system on a 64-bit chip; the POCO C51 reports `armeabi-v7a`, `uname`
+says `armv8l`, and an arm64 binary does not execute there. The deploy tool does this.
+
+**Certificates.** Go verifies TLS against the system CA store and Termux has no
+`/etc/ssl`, so the identity lookup (the thing that writes `asn` into every row) fails
+silently with `identity_unknown` events. `probe.env` sets
+`SSL_CERT_FILE=$PREFIX/etc/tls/cert.pem`. Measurements are unaffected either way,
+because they fingerprint certificates rather than trust them — which is exactly why
+this took a while to notice.
+
+**Proving the phone is not in the owner's tunnel.** `rnfo-probe -whoami` prints the
+ASN. If that is unavailable, make the phone connect to the Moscow probe and read its
+sshd log: a TLS ClientHello against port 22 is logged as `banner exchange: Connection
+from <phone's public address>`. The owner's own workstation shows up in the same log
+from the AS200823 node, which is the contrast that settles it.
 
 Both: plugged in permanently, nothing installed but Termux, Termux:Boot and Termux:API
 from **F-Droid** (the Play Store builds are dead). **No VPN app on either phone**,
@@ -107,12 +144,34 @@ run record as `max_body`.
 ssh -p 8022 <phone-ip> 'tail -3 ~/rnfo/daemon.log; cat ~/rnfo/state/daemon.json; tail -1 ~/rnfo/data/runs/$(date -u +%F).jsonl'
 ```
 
-**Collecting from a phone.** Over the LAN it is `RNFO_SSH_ru_mow_home=<user>@<phone-ip>`
-with port 8022 — add `-p 8022` support or an `ssh_config` `Host` entry. From outside
-the LAN the phone is behind NAT (and the SIM behind carrier NAT): the plan is a
-reverse SSH tunnel from the phone to the Moscow VPS with a forwarding-only key, so the
-collector keeps pulling and the phone still holds no credential to the archive. Not
-built yet.
+**Collecting from a phone: the reverse tunnel.** A phone is behind NAT, so it cannot be
+pulled from directly. Instead it keeps a reverse SSH tunnel open to the Moscow VPS,
+and the collector pulls through that:
+
+- On the VPS: account `rnfo-tunnel` (nologin, locked password), `authorized_keys`
+  entry `restrict,port-forwarding,permitlisten="127.0.0.1:2201" <phone key>`, and
+  `/etc/ssh/sshd_config.d/60-rnfo-tunnel.conf` with a `Match User rnfo-tunnel` block
+  (`AllowTcpForwarding remote`, `PermitTTY no`, `ForceCommand /usr/sbin/nologin`,
+  `ClientAliveInterval 30`). The phone can bind one loopback port there and do nothing
+  else. One port per phone: 2201 is `ru-mow-home`; the next phone gets 2202 and its
+  own key line.
+- On the phone: `install.sh` generates `~/.ssh/rnfo_tunnel` and prints the public key
+  to authorize; `rnfo-boot.sh` keeps `ssh -N -R 127.0.0.1:<port>:127.0.0.1:8022`
+  running in a retry loop (`ExitOnForwardFailure=yes`, so a stale far-side listener
+  becomes a retry, not a half-open tunnel). Log: `~/rnfo/tunnel.log`.
+- On the workstation: `~/.ssh/config` has `Host rnfo-home` (HostName 127.0.0.1, Port
+  2201, ProxyJump root@<moscow-vps>), and `.env` has `RNFO_SSH_ru_mow_home=rnfo-home`.
+  `rnfo-collect pull` needs no change; `ssh rnfo-home` is the phone.
+
+Pull semantics hold: the phone holds a key that can only open a forward to one
+port on one host, and nothing that can read or write the archive.
+
+Deploy with the tunnel in one go:
+
+```bash
+RNFO_DEPLOY_PASSWORD='...' python tools/deploy_termux.py 127.0.0.1 ru-mow-home eyeball \
+    --lan-ip <phone-wifi-ip> --tunnel rnfo-tunnel@<moscow-vps> --tunnel-port 2201
+```
 
 **Clock.** Android network time is good to seconds, not milliseconds. Fine for Tier 1;
 the handsets are not Tier 2 capture points.

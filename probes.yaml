@@ -58,7 +58,8 @@ probes:
 
   - id: ru-mow-home
     role: probe
-    status: planned
+    status: active
+    since: 2026-09-05
     net: eyeball
     country: RU
     region: Moscow Oblast
@@ -94,12 +95,21 @@ probes:
 
       Android has no /etc/resolv.conf, so a static binary resolves nothing by
       default; the agent is pointed at the home router, which keeps the ISP's
-      resolver in the path. The run record carries the resolver used. Both
-      geolocation providers (ipinfo.io, ifconfig.co) were unreachable from
-      this network on 2026-09-05, so the identity lookup returns "unknown"
-      here and the ASN above is set by hand - which is itself a small finding
-      about this operator, and the reason `identity_unknown` events will
-      appear in this probe's stream.
+      resolver in the path. The run record carries the resolver used.
+
+      Correction, same day: the first runs carry identity_unknown events and
+      asn "unknown", and an earlier draft of this note blamed the operator for
+      blocking the geolocation providers. Wrong. The providers answer from
+      this network; the agent could not verify their TLS certificates because
+      Termux has no /etc/ssl and Go found no root store. Fixed by pointing
+      SSL_CERT_FILE at Termux's bundle. Rows from before the fix are valid
+      measurements with an unknown ASN; the registry ASN above was confirmed
+      independently from the Moscow probe's sshd log.
+
+      Reachable from the collector through a reverse SSH tunnel the phone
+      opens to the Moscow probe with a forwarding-only key (loopback port
+      2201 there); the collector pulls through it, so the phone still holds
+      no credential to the archive.
 
       Userspace is 32-bit ARM on a 64-bit core, so the binary is GOARCH=arm.
       Clock is Android's network time, good to seconds, not milliseconds.

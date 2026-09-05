@@ -144,6 +144,8 @@ def main():
                          "(127.0.0.1 tells us nothing about its router)")
     ap.add_argument("--max-body", type=int, default=2 << 20, help="body cap per target; use 262144 on a SIM")
     ap.add_argument("--pubkey", default=os.path.expanduser("~/.ssh/id_ed25519.pub"))
+    ap.add_argument("--tunnel", default=None, help="jump host for the reverse tunnel, user@host (e.g. rnfo-tunnel@<moscow-vps>)")
+    ap.add_argument("--tunnel-port", type=int, default=None, help="loopback port on the jump host this phone binds (one per phone)")
     a = ap.parse_args()
 
     pw = os.environ.get(a.password_env)
@@ -204,7 +206,8 @@ def main():
         print("==> own targets written")
     sftp.close()
     run(c, f"cd {remote} && tar xzf b.tgz && rm b.tgz")
-    run(c, f"bash {remote}/install.sh {a.probe_id} {a.net} '{dns}' {a.max_body}")
+    tunnel = f" '{a.tunnel}' {a.tunnel_port}" if a.tunnel and a.tunnel_port else ""
+    run(c, f"bash {remote}/install.sh {a.probe_id} {a.net} '{dns}' {a.max_body}{tunnel}")
     run(c, f"rm -rf {remote} {home}/rnfo-probe.test")
     c.close()
     print("==> done. Add the phone to probes.yaml (status: active) and .env (RNFO_SSH_...) once its first run record exists.")
