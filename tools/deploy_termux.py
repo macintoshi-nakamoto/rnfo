@@ -184,7 +184,7 @@ def main():
             info.size, info.mode = len(data), mode
             tar.addfile(info, io.BytesIO(data))
         add("rnfo-probe", binary, 0o755)
-        for name in ("install.sh", "rnfo-boot.sh"):
+        for name in ("install.sh", "rnfo-boot.sh", "supervise.sh"):
             with open(os.path.join(REPO, "probe", "deploy", "termux", name), "rb") as f:
                 add(name, f.read().replace(b"\r\n", b"\n"), 0o755)
         if os.path.exists(a.pubkey):

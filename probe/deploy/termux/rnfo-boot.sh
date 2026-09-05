@@ -35,14 +35,8 @@ if [ -n "${RNFO_TUNNEL_HOST:-}" ] && [ -n "${RNFO_TUNNEL_PORT:-}" ]; then
   fi
 fi
 
-# The agent. One supervisor loop; the agent itself decides when to measure.
-if ! pgrep -f "rnfo-probe -daemon" >/dev/null; then
-  nohup bash -c '
-    while true; do
-      set -a; . "$HOME/rnfo/probe.env"; set +a
-      "$HOME/rnfo/bin/rnfo-probe" -daemon >> "$HOME/rnfo/daemon.log" 2>&1
-      echo "$(date -u +%FT%TZ) daemon exited rc=$?, restarting in 30s" >> "$HOME/rnfo/daemon.log"
-      sleep 30
-    done
-  ' >/dev/null 2>&1 &
+# The agent, under its supervisor. The supervisor is a separate script so that
+# restarting the daemon by name does not kill the thing that restarts it.
+if ! pgrep -f "bin/supervise.sh" >/dev/null; then
+  nohup bash "$BASE/bin/supervise.sh" >/dev/null 2>&1 &
 fi

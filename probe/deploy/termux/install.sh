@@ -73,7 +73,8 @@ echo "    public key (authorize it on the jump host with restrict,port-forwardin
 echo "    $(cat "$HOME/.ssh/rnfo_tunnel.pub")"
 chmod 0600 "$BASE/probe.env"
 
-echo "==> boot script (Termux:Boot runs everything in ~/.termux/boot after unlock)"
+echo "==> supervisor and boot script (Termux:Boot runs everything in ~/.termux/boot after unlock)"
+install -m 0755 "$SRC/supervise.sh" "$BASE/bin/supervise.sh"
 install -m 0755 "$SRC/rnfo-boot.sh" "$HOME/.termux/boot/rnfo.sh"
 
 echo "==> recovery hook: opening the Termux app starts everything"
@@ -95,8 +96,8 @@ fi
 echo "==> starting now"
 "$HOME/.termux/boot/rnfo.sh"
 sleep 3
-if pgrep -f "rnfo-probe -daemon" >/dev/null; then
-  echo "    daemon running (pid $(pgrep -f 'rnfo-probe -daemon' | head -1))"
+if pgrep -f "rnfo-probe -daemo[n]" >/dev/null; then
+  echo "    daemon running (pid $(pgrep -f 'rnfo-probe -daemo[n]' | head -1))"
 else
   echo "    daemon did not start; see $BASE/daemon.log" >&2
   tail -20 "$BASE/daemon.log" >&2 || true
