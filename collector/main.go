@@ -197,8 +197,16 @@ func validateMeasurement(m map[string]any, reg *registry.Registry, probe string,
 			report(fmt.Sprintf("net %q disagrees with probes.yaml (%q)", n, p.Net))
 		}
 	}
-	if a, ok := m["attempt"].(float64); ok && (a < 1 || a > 2) {
-		report(fmt.Sprintf("attempt out of range: %v", a))
+	// attempt means two different things depending on the profile, and the
+	// schema says so: in a scheduled run it is 1 (first try) or 2 (the
+	// confirmation retry); in the sni experiment it is the round number, and
+	// the experiment is run with as many rounds as the operator chooses.
+	maxAttempt := 2.0
+	if p, _ := m["profile"].(string); p == "sni" {
+		maxAttempt = 100
+	}
+	if a, ok := m["attempt"].(float64); ok && (a < 1 || a > maxAttempt) {
+		report(fmt.Sprintf("attempt out of range for profile %v: %v", m["profile"], a))
 	}
 	// The ethics rule is enforced here, not left to discipline: a probe
 	// address must never appear in the dataset.

@@ -62,24 +62,47 @@ probes:
     net: eyeball
     country: RU
     region: Moscow Oblast
-    asn: unknown
-    operator: unknown
+    asn: AS8402
+    asn_name: PJSC Vimpelcom
+    operator: Vimpelcom (Beeline / Corbina), residential broadband
     uplink: broadband
     consent: owner
     dedicated: true
-    device: realme Note 60 (Unisoc T612, Android 14), Termux, agent in -daemon mode
+    device: POCO C51 (Xiaomi 2305EPCC4G, Android 13 Go, 32-bit userspace), Termux, agent in -daemon mode
     clock: android-nitz
     notes: >
-      The residential vantage point, and the scientifically important one.
-      Runs on a dedicated handset on the home Wi-Fi, plugged in, nothing else
-      on it. Two conditions before activation: the handset's traffic must not
-      pass through the owner's own tunnel (the vantage point rule (docs/METHODOLOGY.md §5); verified by
-      checking the handset's egress ASN is a Russian ISP, not AS200823), and
-      the address is dynamic, so an ASN change is an event and is logged.
-      Android has no /etc/resolv.conf, so the agent is pointed at the home
-      router as resolver, which keeps the ISP's DNS in the path; the run
-      record carries the resolver used. Clock is Android's network time, good
-      to seconds, not milliseconds.
+      The residential vantage point, and the scientifically important one:
+      Russian filtering equipment is deployed at operators serving
+      subscribers, so this probe sees what the Moscow hosting probe cannot.
+      A dedicated handset on the home Wi-Fi, plugged in, nothing else on it.
+
+      Not inside the owner's tunnel - measured, not assumed, on 2026-09-05.
+      The handset was made to open a connection to the Moscow probe, whose
+      sshd logged the source as a Vimpelcom broadband address, reverse
+      its reverse name under broadband.corbina.ru, AS8402. The owner's workstation
+      appears in the same log as an AS200823 node (AS200823, inside the tunnel),
+      which is the contrast that makes the check conclusive. Re-run it with
+      `rnfo-probe -whoami` or by the same log trick after any router change.
+
+      Geolocation disagreement, recorded as observed rather than resolved:
+      ipinfo places this address in Penza Oblast while the owner is in the
+      Moscow region. Russian broadband addresses are pooled across regions and
+      city-level geolocation of them is unreliable, so region is written as
+      the provider's, and no claim in the dataset may depend on the city.
+
+      The address is dynamic: an ASN change is an event and is logged.
+
+      Android has no /etc/resolv.conf, so a static binary resolves nothing by
+      default; the agent is pointed at the home router, which keeps the ISP's
+      resolver in the path. The run record carries the resolver used. Both
+      geolocation providers (ipinfo.io, ifconfig.co) were unreachable from
+      this network on 2026-09-05, so the identity lookup returns "unknown"
+      here and the ASN above is set by hand - which is itself a small finding
+      about this operator, and the reason `identity_unknown` events will
+      appear in this probe's stream.
+
+      Userspace is 32-bit ARM on a 64-bit core, so the binary is GOARCH=arm.
+      Clock is Android's network time, good to seconds, not milliseconds.
 
   - id: ru-mobile
     role: probe
@@ -91,9 +114,10 @@ probes:
     uplink: cellular
     consent: owner
     dedicated: true
-    device: POCO C51 (Helio G36, Android 13 Go), Termux, agent in -daemon mode
     clock: android-nitz
     notes: >
+      Not yet assigned a handset: the POCO C51 went to ru-mow-home, which is
+      the more valuable role, and the realme Note 60 is the owner's own phone.
       Dedicated handset on a SIM with Wi-Fi switched off, so every row is a
       cellular measurement. Same binary as every other probe, built for
       linux/arm64, scheduled by the agent's own daemon mode because there is

@@ -34,7 +34,17 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(REPO, "tools"))
 from deploy import load_env, own_targets_csv  # noqa: E402
 
-ARCH = {"aarch64": "arm64", "arm64": "arm64", "armv7l": "arm", "armv8l": "arm64", "x86_64": "amd64"}
+# Termux's own architecture decides what binary will run, not the CPU's.
+# Budget Android devices ship a 32-bit userspace on a 64-bit core: the POCO
+# C51 has a 64-bit Helio G36 but reports armeabi-v7a and runs a 32-bit Termux,
+# where an arm64 binary would not execute at all. `dpkg --print-architecture`
+# inside Termux is authoritative; uname is only a fallback, and armv8l there
+# means a 32-bit userspace on a 64-bit core, so it maps to arm, not arm64.
+ARCH = {
+    "aarch64": "arm64", "arm64": "arm64",
+    "arm": "arm", "armv7l": "arm", "armv8l": "arm",
+    "x86_64": "amd64", "i686": "386",
+}
 
 
 def build(goarch: str) -> bytes:
@@ -63,6 +73,63 @@ def run(c, cmd, check=True):
     return out
 
 
+def upload_binary(c, binary: bytes) -> str:
+    """Put the agent on the phone early, so resolvers can be tested with it."""
+    home = run(c, "echo $HOME").strip()
+    path = posixpath.join(home, "rnfo-probe.test")
+    run(c, f"mkdir -p {home}/rnfo")
+    sftp = c.open_sftp()
+    with sftp.file(path, "wb") as f:
+        f.write(binary)
+    sftp.close()
+    run(c, f"chmod 0755 {path}")
+    return path
+
+
+def pick_resolver(c, a) -> str:
+    """Return the first candidate resolver that actually resolves names.
+
+    Tested with the agent itself in dry-run mode, on the phone, over the
+    network the probe will really use. Anything less is a guess.
+    """
+    home = run(c, "echo $HOME").strip()
+    binpath = posixpath.join(home, "rnfo-probe.test")
+
+    candidates = []
+    if a.dns:
+        candidates.append(a.dns)
+    for prop in ("net.dns1", "dhcp.wlan0.dns1"):
+        v = run(c, f"getprop {prop} 2>/dev/null || true", check=False).strip()
+        if v and not v.startswith("::"):
+            candidates.append(v)
+    # The router is the .1 of the phone's own /24 far more often than not, and
+    # using it keeps the ISP's resolver in the path, which is what an eyeball
+    # measurement should see.
+    host = a.lan_ip or a.host
+    if host.count(".") == 3 and not host.startswith("127."):
+        parts = host.split(".")
+        candidates.append(".".join(parts[:3] + ["1"]))
+        candidates.append(".".join(parts[:3] + ["254"]))
+
+    seen, ordered = set(), []
+    for d in candidates:
+        if d not in seen:
+            seen.add(d)
+            ordered.append(d)
+
+    for d in ordered:
+        print(f"    trying resolver {d} ...", end=" ", flush=True)
+        out = run(c, f"{binpath} -probe dns-test -net {a.net} -profile controls -dry-run -dns '{d}' 2>&1 | head -4",
+                  check=False)
+        if " ok " in out or "stage=ok" in out:
+            print("resolves")
+            return d
+        print("no")
+    raise SystemExit(
+        "no working resolver found on the phone. Pass --dns <router-ip> explicitly; "
+        "find it in Android Settings > Wi-Fi > (your network) > Advanced > Gateway.")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("host", help="phone's LAN address")
@@ -71,7 +138,10 @@ def main():
     ap.add_argument("--port", type=int, default=8022)
     ap.add_argument("--user", default="termux", help="ignored by Termux sshd but required by the protocol")
     ap.add_argument("--password-env", default="RNFO_DEPLOY_PASSWORD")
-    ap.add_argument("--dns", default=None, help="resolver host[:port]; default: the phone's default gateway")
+    ap.add_argument("--dns", default=None, help="resolver host[:port]; default: probed, see pick_resolver")
+    ap.add_argument("--lan-ip", default=None,
+                    help="the phone's own LAN address, when reaching it through an adb forward "
+                         "(127.0.0.1 tells us nothing about its router)")
     ap.add_argument("--max-body", type=int, default=2 << 20, help="body cap per target; use 262144 on a SIM")
     ap.add_argument("--pubkey", default=os.path.expanduser("~/.ssh/id_ed25519.pub"))
     a = ap.parse_args()
@@ -89,22 +159,12 @@ def main():
                   allow_agent=False, timeout=20, banner_timeout=25, auth_timeout=25)
     print(f"==> connected to {a.host}:{a.port}")
 
-    uname = run(c, "uname -m").strip()
-    goarch = ARCH.get(uname)
+    reported = run(c, "dpkg --print-architecture 2>/dev/null || uname -m", check=False).strip().splitlines()
+    reported = reported[-1].strip() if reported else ""
+    goarch = ARCH.get(reported)
     if not goarch:
-        raise SystemExit(f"unknown architecture {uname!r}")
-    print(f"==> phone reports {uname} -> linux/{goarch}")
-
-    # The phone knows its own gateway better than we do.
-    dns = a.dns
-    if not dns:
-        gw = run(c, "ip route get 1.1.1.1 2>/dev/null | awk '{for(i=1;i<=NF;i++) if($i==\"via\") print $(i+1)}' | head -1 || true", check=False).strip()
-        if not gw:
-            gw = run(c, "getprop net.dns1 2>/dev/null || true", check=False).strip()
-        if not gw:
-            raise SystemExit("could not detect a resolver on the phone; pass --dns <router-ip>")
-        dns = gw
-    print(f"==> resolver: {dns}")
+        raise SystemExit(f"unknown architecture {reported!r}")
+    print(f"==> termux architecture {reported} -> linux/{goarch}")
 
     egress = run(c, "curl -s --max-time 8 https://ipinfo.io/json 2>/dev/null | tr -d '\\n' || true", check=False).strip()
     print(f"==> phone egress as seen from outside: {egress[:200]}")
@@ -113,6 +173,7 @@ def main():
                          "tunnel. the vantage point rule (docs/METHODOLOGY.md §5): fix the routing first, then deploy.")
 
     binary = build(goarch)
+    upload_binary(c, binary)
     env = load_env()
     buf = io.BytesIO()
     with tarfile.open(fileobj=buf, mode="w:gz") as tar:
@@ -128,6 +189,9 @@ def main():
             with open(a.pubkey, "rb") as f:
                 add("authorized_key", f.read().strip() + b"\n", 0o644)
 
+    dns = pick_resolver(c, a)
+    print(f"==> resolver: {dns} (proven, not inferred)")
+
     home = run(c, "echo $HOME").strip()
     remote = posixpath.join(home, "rnfo-deploy")
     run(c, f"rm -rf {remote} && mkdir -p {remote} $HOME/rnfo")
@@ -141,7 +205,7 @@ def main():
     sftp.close()
     run(c, f"cd {remote} && tar xzf b.tgz && rm b.tgz")
     run(c, f"bash {remote}/install.sh {a.probe_id} {a.net} '{dns}' {a.max_body}")
-    run(c, f"rm -rf {remote}")
+    run(c, f"rm -rf {remote} {home}/rnfo-probe.test")
     c.close()
     print("==> done. Add the phone to probes.yaml (status: active) and .env (RNFO_SSH_...) once its first run record exists.")
 

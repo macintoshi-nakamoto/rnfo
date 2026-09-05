@@ -82,6 +82,7 @@ func main() {
 		runID    = flag.String("run-id", "", "override the slot-derived run id")
 		daemon   = flag.Bool("daemon", false, "keep running and fire profiles on their slot boundaries (for hosts without systemd)")
 		daemonP  = flag.String("daemon-profiles", env("RNFO_DAEMON_PROFILES", "controls,full"), "profiles the daemon schedules")
+		whoami   = flag.Bool("whoami", false, "print the network this probe is on and exit; used to commission a probe")
 		dryRun   = flag.Bool("dry-run", false, "measure a handful of targets and print rows to stdout")
 		showVer  = flag.Bool("version", false, "print version and exit")
 	)
@@ -128,6 +129,15 @@ func main() {
 	defer stop()
 
 	switch {
+	case *whoami:
+		// Commissioning check. A probe whose traffic leaves through the
+		// operator's own tunnel measures the tunnel, not the network it is
+		// supposed to represent (the vantage point rule (docs/METHODOLOGY.md §5)), and the only way to
+		// know is to ask the outside what address is talking to it.
+		id, _, _ := identity.Resolve(ctx, cfg.stateDir)
+		fmt.Printf("asn=%s\ncountry=%s\nregion=%s\ncity=%s\n", id.ASN, id.Country, id.Region, id.City)
+		return
+
 	case *exper != "":
 		if *exper != "sni" {
 			log.Fatalf("unknown experiment %q", *exper)
