@@ -78,6 +78,7 @@ def main():
             hostname, port, user = spec.split(":")
             lines += [f"Host {name}", f"    HostName {hostname}", f"    Port {port}", f"    User {user}",
                       f"    IdentityFile {a.key}", "    StrictHostKeyChecking accept-new", "    BatchMode yes", ""]
+        lines.append("# end RNFO watcher aliases")
         snippet = "\n".join(lines) + "\n"
 
     binary = build()

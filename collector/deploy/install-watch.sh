@@ -27,8 +27,16 @@ if [ -f "$SRC/ssh_config.snippet" ]; then
   echo "==> ssh aliases"
   install -d -m 0700 /root/.ssh
   touch /root/.ssh/config && chmod 0600 /root/.ssh/config
-  MARK="$(head -1 "$SRC/ssh_config.snippet")"
-  grep -qF "$MARK" /root/.ssh/config || cat "$SRC/ssh_config.snippet" >> /root/.ssh/config
+  # Replace the managed block rather than skip it: a wrong block from an
+  # earlier run must not survive a redeploy. Blocks without an end marker
+  # (written before the marker existed) are removed to end of file, which is
+  # where they were appended.
+  if grep -q '^# end RNFO watcher aliases' /root/.ssh/config; then
+    sed -i '/^# RNFO watcher aliases/,/^# end RNFO watcher aliases/d' /root/.ssh/config
+  else
+    sed -i '/^# RNFO watcher aliases/,$d' /root/.ssh/config
+  fi
+  cat "$SRC/ssh_config.snippet" >> /root/.ssh/config
 fi
 
 echo "==> units"
