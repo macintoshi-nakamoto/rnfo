@@ -50,7 +50,7 @@ One target, from one probe, at one moment.
 | `ts` | string | RFC 3339, UTC, milliseconds: `2026-09-04T20:07:33.412Z` |
 | `probe` | string | must exist in `probes.yaml` |
 | `net` | string | `hosting`, `eyeball`, `mobile` - must agree with the registry |
-| `asn` | string | as observed, e.g. `AS203273 NetCrafters OU` |
+| `asn` | string | as observed, e.g. `AS203273 NetCrafters OU`. **Group by the leading AS number.** The operator name after it is a label whose spelling depends on which lookup answered (Team Cymru's DNS service or an HTTPS provider); rows written by agent 0.4.0 and 0.4.1 carry Cymru's raw form (`AS8402 CORBINA-AS - PJSC _Vimpelcom_, RU`), later agents normalise it |
 | `country`, `region` | string | probe location; never an address |
 | `agent` | string | `rnfo-probe/0.1.0` |
 | `profile` | string | `full`, `controls`, or `sni` |

@@ -179,10 +179,28 @@ func viaDNS(ctx context.Context) (Identity, bool) {
 	if name, err := net.DefaultResolver.LookupTXT(c, "AS"+asn[0]+".asn.cymru.com"); err == nil && len(name) > 0 {
 		nf := strings.Split(name[0], "|")
 		if len(nf) >= 5 {
-			id.ASN += " " + strings.TrimSpace(nf[4])
+			if n := cymruName(nf[4]); n != "" {
+				id.ASN += " " + n
+			}
 		}
 	}
 	return id, true
+}
+
+// cymruName turns Cymru's "CORBINA-AS - PJSC _Vimpelcom_, RU" into
+// "PJSC Vimpelcom", the shape the HTTPS providers use. The asn field is a
+// label people group by, so one operator must not appear under two
+// spellings depending on which lookup path answered that day.
+func cymruName(raw string) string {
+	n := strings.TrimSpace(raw)
+	if i := strings.Index(n, " - "); i >= 0 {
+		n = n[i+3:]
+	}
+	if i := strings.LastIndex(n, ", "); i >= 0 && len(n)-i == 4 { // trailing ", CC"
+		n = n[:i]
+	}
+	n = strings.ReplaceAll(n, "_", "")
+	return strings.Join(strings.Fields(n), " ")
 }
 
 // viaHTTP asks the JSON providers.

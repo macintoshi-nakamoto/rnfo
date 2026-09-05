@@ -10,7 +10,7 @@ package schema
 const Version = "v1"
 
 // AgentVersion identifies the binary that produced a record.
-const AgentVersion = "rnfo-probe/0.4.1"
+const AgentVersion = "rnfo-probe/0.4.2"
 
 // Network types a probe can sit on. "hosting" is a datacentre uplink,
 // "eyeball" is a residential subscriber line, "mobile" is a cellular carrier.
@@ -47,7 +47,7 @@ type Measurement struct {
 	TS      string `json:"ts"`     // RFC3339, UTC, milliseconds
 	Probe   string `json:"probe"`
 	Net     string `json:"net"`
-	ASN     string `json:"asn"`     // "AS203273 NetCrafters OU"
+	ASN     string `json:"asn"`     // "AS203273 NetCrafters OU"; group by the number, the name's spelling depends on the lookup source
 	Country string `json:"country"` // probe country, from the identity lookup
 	Region  string `json:"region"`  // probe region; never a full address
 	Agent   string `json:"agent"`
