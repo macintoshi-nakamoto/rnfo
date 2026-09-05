@@ -247,6 +247,21 @@ to `data/logs/pull.log`. The archive therefore exists in three places: on each p
 for 90 days, on the workstation, and on the mirror. It is not in git; publication is a
 separate, versioned release under `data/LICENSE`.
 
+**Workstation tasks and the logon type.** Both Task Scheduler jobs were created as
+"run only when user is logged on" (interactive logon). That type fails with result
+`-2147020576` whenever there is no interactive session, which is exactly when nobody is
+watching. Switching them to a non-interactive logon (S4U, no stored password) needs an
+elevated shell once. In a PowerShell started as Administrator:
+
+```powershell
+$p = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType S4U -RunLevel Limited
+foreach ($t in "RNFO daily pull","RNFO health") { Set-ScheduledTask -TaskName $t -Principal $p }
+```
+
+Until that is done the workstation jobs run only while the user is logged on, and
+`StartWhenAvailable` makes a missed run fire at the next opportunity. The watchers on
+the servers do not depend on the workstation at all.
+
 **Health and alerts.** `rnfo-collect health` runs one fixed status command on every
 active probe and reports the newest controls run: stale after 45 minutes (three
 slots), or unhealthy, or a clock more than five seconds off. `-responder` also fetches
