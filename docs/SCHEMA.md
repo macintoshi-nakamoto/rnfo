@@ -178,7 +178,7 @@ Written once per run into `data/runs/`. Distinguished by `"kind": "run"`.
 | `by_verdict` | verdict histogram |
 | `controls_total`, `controls_ok` | all connectivity controls, domestic and international |
 | `controls_intl_total`, `controls_intl_ok` | the international subset (agent 0.2.0+) |
-| `healthy` | **agent 0.2.0+:** false when half or more of the *international* controls failed. **agent 0.1.0:** judged on all controls. Either way: **analysis must discard the run's measurements**, the probe had no usable network. The `agent` field says which rule applied |
+| `healthy` | **agent 0.2.0+:** false when half or more of the *international* controls failed. **agent 0.1.0:** judged on all controls. Either way: **analysis must discard the run's measurements**, the probe had no usable network. The `agent` field says which rule applied. From 0.4.3 this flag also gates the confirmation retry: a healthy run with failures always has `attempt: 2` rows; before 0.4.3 the retry was skipped when more than 40 % of the run failed, whatever the controls said |
 | `list_manifest` | list name → SHA-256 of the file used, so any row traces to its exact target set |
 | `resolver` | (agent 0.3.0+) DNS server used when it was not the system resolver - set on Termux hosts, where it is the home router; empty on servers. A run using a public resolver measures something different, and this says so |
 | `max_body` | (agent 0.3.0+) the per-target body cap the run was configured with; lowered on metered links. `body_len`/`body_truncated` are read against it |
@@ -210,6 +210,7 @@ Written into `data/runs/`. Distinguished by `"kind": "event"`.
 | Version | Date | Change |
 |---|---|---|
 | v1 | 2026-09-04 | Initial schema. |
+| v1 (agent 0.4.3) | 2026-09-08 | No field meaning changed. The confirmation retry is gated on `healthy` instead of on a 40 % failure ceiling; the ceiling had silently disabled retries on the residential probe, whose normal failure rate is 40-41 %. Rows from `ru-mow-home` before 2026-09-08T18:00Z have no `attempt: 2`; see METHODOLOGY §4.3 and limitation 10. |
 | v1 (agent 0.4.0) | 2026-09-05 | No field meaning changed. Run record gains optional `clock_offset_ms` and `clock_source`; new event `clock_offset`. Identity is now found by DNS first (a "myip" resolver plus Team Cymru's ASN service), with the HTTPS providers only adding region and city, so a probe on a network that dislikes API hosts, or a handset without a CA store, still names its ASN. `asn_changed` compares AS numbers only, because the two lookup paths spell operator names differently. |
 | v1 (agent 0.3.0) | 2026-09-05 | No field meaning changed. Run record gains optional `resolver` and `max_body`. New event types `agent_started`, `run_skipped_overlap`. Daemon mode for hosts without systemd produces identical records. |
 | v1 (agent 0.2.0) | 2026-09-04 | No field meaning changed. Added `controls_intl_total`/`controls_intl_ok`; `healthy` is now computed from international controls only, because a domestic Russian control (`gosuslugi.ru`) is not obliged to answer a foreign probe and did not. Control categories became `CTRL-RU`/`CTRL-INTL`. New `list` values `own` and `sni`, new `profile` value `sni`. |

@@ -53,11 +53,6 @@ var slotPeriod = map[string]time.Duration{
 	"controls": 15 * time.Minute,
 }
 
-// retryCeiling: if more than this share of targets failed, the second pass is
-// skipped. When a probe has lost its uplink, retrying every target proves
-// nothing and doubles the load on the target list for no information.
-const retryCeiling = 0.40
-
 // config is everything a run needs that does not change between runs.
 type config struct {
 	probeID  string
@@ -384,21 +379,31 @@ func runOnce(ctx context.Context, cfg config, profile, runID string, mw, rw *jso
 		slot, len(set.Targets), ctrlTotal, ctrlIntlTotal, cfg.probeID, id)
 	measure(set.Targets, 1)
 
+	// Health is judged on the international controls: those must answer any
+	// probe on the planet, so failing them means this probe had no usable
+	// network and the run says nothing about filtering. Decided after the
+	// first pass so the retry below can use it.
+	healthy := ctrlIntlTotal == 0 || float64(ctrlIntlOK) >= 0.5*float64(ctrlIntlTotal)
+
 	// Second pass: a single confirmation retry, only for what failed, and only
-	// when most of the run succeeded. A failure that reproduces immediately is
-	// much stronger evidence than a single observation.
+	// when the probe demonstrably had a network. A failure that reproduces
+	// immediately is much stronger evidence than a single observation.
+	//
+	// Until 0.4.2 the guard was a raw ceiling, "skip if more than 40% of the
+	// run failed", meant to catch a lost uplink. On the residential probe the
+	// ordinary failure rate sits at 40-41%, so the guard fired on every full
+	// run and that probe's failures went unconfirmed for its first four days.
+	// A lost uplink is what the controls are for; they gate the retry now.
 	retried := 0
-	if n := len(set.Targets); n > 0 && float64(len(failed))/float64(n) <= retryCeiling && ctx.Err() == nil {
+	if healthy && len(failed) > 0 && ctx.Err() == nil {
 		time.Sleep(3 * time.Second)
 		retried = len(failed)
 		measure(failed, 2)
+	} else if !healthy && len(failed) > 0 {
+		log.Printf("run %s: international controls %d/%d, retry skipped", slot, ctrlIntlOK, ctrlIntlTotal)
 	}
 
 	finished := time.Now().UTC()
-	// Judged on the international controls: those must answer any probe on the
-	// planet, so failing them means this probe had no usable network and the
-	// run says nothing about filtering.
-	healthy := ctrlIntlTotal == 0 || float64(ctrlIntlOK) >= 0.5*float64(ctrlIntlTotal)
 	run := schema.Run{
 		Schema: schema.Version, Kind: "run", RunID: slot,
 		Probe: cfg.probeID, Net: cfg.netType,

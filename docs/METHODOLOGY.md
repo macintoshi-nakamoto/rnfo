@@ -145,9 +145,22 @@ A target that fails is measured once more, three seconds later, recorded as
 single observation, and the two rows let the analysis quantify how much of the
 observed failure rate is transient.
 
-The retry is skipped when more than 40 % of the run failed. At that point the probe
-has most likely lost its uplink, retrying every target proves nothing, and it would
-double the load placed on the test-list sites for no information.
+The retry is skipped when the run is not `healthy`, that is, when the international
+connectivity controls (section 4.2) failed in the first pass. A probe without a network
+would otherwise retry every target, prove nothing, and double the load placed on the
+test-list sites for no information.
+
+Until agent 0.4.2 the guard was different: skip the retry when more than 40 % of the
+first pass failed. That threshold was chosen with the hosting probe in mind, where a
+quarter of the list fails. On the residential line the ordinary failure rate is
+40-41 %, so the guard fired on every full run and none of that probe's failures were
+confirmed between 2026-09-05 and 2026-09-08 (limitation 10). The lesson is recorded
+here because it is a methodological one: a fixed share of failures cannot distinguish
+"the network is down" from "the network filters a lot", and the controls exist
+precisely to make that distinction. From 0.4.3 they gate the retry. The change does
+not alter any field's meaning; `attempt: 2` rows simply exist for the residential probe
+from that version on, and their absence before it must be read as "not retried", not
+as "did not reproduce".
 
 ---
 
@@ -417,6 +430,68 @@ block persists, lifts, or changes ports - the kind of series that is only obtain
 by leaving an instrument in place. And the SNI experiment is ready to run the moment a
 reachable responder exists; the code and the name rule do not change.
 
+### 8.5 Three sealed days, 2026-09-05 to 2026-09-07
+
+The first numbers from verified day files rather than `live-` copies. Twelve full slots
+paired against the Dutch control, first attempts only, all three subjects in the same
+slots with the same list.
+
+| Subject vs `nl-lim-panel` | Paired rows | ok from both | failed from subject only | failed from both | control only |
+|---|---|---|---|---|---|
+| `ru-mow-home` (residential, AS8402) | 28 280 | 58.9 % | **35.2 %** | 5.5 % | 0.3 % |
+| `ru-msk-vps` (hosting, AS203273) | 33 936 | 67.6 % | **26.3 %** | 5.6 % | 0.4 % |
+| `de-fra-vps` (Frankfurt, AS210644) | 33 936 | 84.7 % | 9.3 % | 5.7 % | 0.3 % |
+
+The single-slot figures of 8.1 and 8.3 hold across three days with no visible drift:
+the residential line loses about nine points more of the list than the datacentre
+uplink, in every slot. The Frankfurt row is the prefix block of 8.2 seen as a series:
+97 % of its subject-only failures are `connect_timeout`, they are the Russian-hosted
+targets, and the share has not moved.
+
+By mechanism, subject-only failures:
+
+| Mechanism | `ru-mow-home` | `ru-msk-vps` |
+|---|---|---|
+| `tls_timeout` | 6 562 (65.9 %) | 7 316 (81.8 %) |
+| `response_timeout` | 2 195 (22.0 %) | 102 (1.1 %) |
+| `request_timeout` | 562 (5.6 %) | 364 (4.1 %) |
+| `connect_timeout` | 412 (4.1 %) | 737 (8.2 %) |
+| `tls_reset` | 18 | 186 (2.1 %) |
+| `dns_fail` + `dns_timeout` | 190 (1.9 %) | 24 |
+
+The hosting network is almost a single mechanism: a silent drop after the ClientHello.
+The residential line adds a second one that the hosting network practically lacks, a
+connection that completes the handshake, sends its request, starts receiving and then
+stalls, in one of every five subject-only failures. That is the behaviour the
+literature attributes to shaping at the subscriber edge, and the residential probe is
+the only instrument in this project that can see it. Its `bytes_read` distribution is
+the next analysis.
+
+By Citizen Lab category, share of first attempts that failed, all lists, three days:
+
+| Category | `ru-mow-home` | `ru-msk-vps` | `nl-lim-panel` |
+|---|---|---|---|
+| NEWS | 58 % | 52 % | 7 % |
+| POLR | 54 % | 45 % | 7 % |
+| LGBT | 54 % | 42 % | 10 % |
+| FILE | 49 % | 42 % | 11 % |
+| GRP | 46 % | 41 % | 4 % |
+| ANON | 39 % | 36 % | 4 % |
+| HUMR | 38 % | 23 % | 6 % |
+| REL | 24 % | 10 % | 4 % |
+| PUBH | 21 % | 9 % | 8 % |
+
+The Dutch column is the noise floor: list rot and sites that dislike datacentre
+addresses. The gap between the two Russian columns is largest in the categories that
+are least "political" (religion, public health, human rights), which is consistent
+with the residential mechanism being coarser than the hosting one, but three days from
+one household do not establish that.
+
+Caveat that applies to every residential number above: none of them is confirmed by
+a second attempt (limitation 10). The hosting numbers are: all 8 940 hosting failures
+were retried three seconds later and 8 539 (95.5 %) failed again. The 4.5 % that
+succeeded on retry are the transient share, and they are the reason the retry exists.
+
 ---
 
 ## 9. Load and politeness
@@ -477,3 +552,8 @@ endpoints is ever contacted. No enumeration, no range scanning, no port sweeps.
 9. Clock discipline is verified but not yet monitored. `chrony` on the Moscow probe
    reported an offset of −1.2 ms on 2026-09-04, which is fine for Tier 1 and adequate
    for Tier 2, but there is no alert if it drifts.
+10. The residential probe's rows from 2026-09-05 to the full slot of 2026-09-08T12:00Z
+   carry no `attempt: 2` rows, because the retry guard of agent 0.4.2 and earlier
+   misread its ordinary failure rate as a lost uplink (section 4.3). Failure rates
+   from that probe in that window are single observations. From 0.4.3 the retry is
+   gated on the controls and runs there like everywhere else.

@@ -12,16 +12,17 @@ present in this repository. See [`docs/ETHICS.md`](docs/ETHICS.md).
 network and a residential broadband line), two foreign controls in two autonomous
 systems, and a responder, all on the same UTC schedule with shared run ids.
 
-First results, provisional. From the Moscow hosting network, **25 % of the standard
-test list fails only from Russia**, in every slot so far, every failure reproducing on
-retry, 84 % of it as a silent drop during the TLS handshake. From the residential line
-the figure is **35 %**, and the extra failures look different: connections that start
-receiving a response and then stall, on the international list. That gap between a
+First results, from three sealed days. From the Moscow hosting network, **26 % of the
+standard test list fails only from Russia**, in every slot, 95 % of it reproducing on
+an immediate retry, 82 % of it as a silent drop during the TLS handshake. From the residential
+line the figure is **35 %**, and the extra failures look different: one in five is a
+connection that starts receiving a response and then stalls, a mechanism the hosting
+network practically never shows. That gap between a
 datacentre uplink and a subscriber line is the project's first real question, and this
 is the first slot that measures it. The second foreign host produced a finding of its
 own: TCP between its prefix and both Russian networks is dead in both directions while
 ICMP passes. Details, the correction of an early wrong claim, and caveats in
-[`docs/METHODOLOGY.md`](docs/METHODOLOGY.md) §8.
+[`docs/METHODOLOGY.md`](docs/METHODOLOGY.md) §8, three-day tables in §8.5.
 
 ---
 
