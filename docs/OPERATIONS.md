@@ -276,6 +276,12 @@ once more when it recovers. State lives in the `-state` file. A URL containing
 detail that costs an hour if forgotten: a bot cannot message a person until that
 person has opened the bot and pressed Start once.
 
+The state file advances only after the message is delivered. A watcher that cannot
+reach the alert endpoint has most likely lost its own network, and what it saw is not
+evidence about the probes; it prints `alert state not advanced` and the next run
+starts from the previous state. Without this, the workstation once swallowed a
+PROBLEM it could not send and then sent a RECOVERED for an outage that never happened.
+
 Test the whole path by making everything look stale: `rnfo-collect health -alert
 -stale 1s`, then run it again normally and expect the RECOVERED message.
 

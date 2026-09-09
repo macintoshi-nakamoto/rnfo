@@ -160,13 +160,24 @@ func cmdHealth(args []string) error {
 					st[r.name] = healthEntry{Stale: false, LastAlert: prev.LastAlert}
 				}
 			}
-			saveHealthState(*statePath, st)
-			if len(msgs) > 0 {
+			// The state advances only once the message is delivered. If the
+			// alert endpoint is unreachable, the watcher itself has most likely
+			// lost its network, and "probe unreachable" from a watcher without
+			// a network is not a finding about the probe. Persisting it would
+			// swallow the PROBLEM and then send a RECOVERED for an outage that
+			// never happened, which is what the workstation did on 2026-09-09
+			// when its uplink dropped for an hour. Left as it was, the next
+			// run re-evaluates from the previous state.
+			if len(msgs) == 0 {
+				saveHealthState(*statePath, st)
+			} else {
 				host, _ := os.Hostname()
 				msg := fmt.Sprintf("RNFO health from %s, %s\n%s", host, now.Format("2006-01-02 15:04 UTC"), strings.Join(msgs, "\n"))
 				if err := notify(u, msg); err != nil {
 					fmt.Println("alert failed:", err)
+					fmt.Println("alert state not advanced: this watcher may be the one without a network")
 				} else {
+					saveHealthState(*statePath, st)
 					fmt.Printf("alert sent (%d item(s))\n", len(msgs))
 				}
 			}

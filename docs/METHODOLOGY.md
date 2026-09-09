@@ -487,6 +487,14 @@ are least "political" (religion, public health, human rights), which is consiste
 with the residential mechanism being coarser than the hosting one, but three days from
 one household do not establish that.
 
+One more series from the same days, because 8.4 stated it as absolute: the `own` rows
+from the Moscow probe to the responder, every fifteen minutes. Successful dials per
+day: 0 of 88 (09-04), **46 of 740 (09-05)**, 0 of 800, 0 of 800, 0 of 796, 1 of 392
+(09-09, up to noon). The prefix block toward AS210644 is not absolute; it has opened
+for a few hours once and for a single dial once. Whether that is a route change, a
+device restart or something periodic is exactly the question a fifteen-minute series
+can answer later and a one-off test never could.
+
 Caveat that applies to every residential number above: none of them is confirmed by
 a second attempt (limitation 10). The hosting numbers are: all 8 940 hosting failures
 were retried three seconds later and 8 539 (95.5 %) failed again. The 4.5 % that
