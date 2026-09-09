@@ -487,6 +487,28 @@ are least "political" (religion, public health, human rights), which is consiste
 with the residential mechanism being coarser than the hosting one, but three days from
 one household do not establish that.
 
+Where the residential stalls stop. For the 3 044 `response_timeout` rows that failed
+only from the residential probe over four days (2026-09-05 to 09-08), `bytes_read` is
+the number of wire bytes that arrived before the connection went silent:
+
+| bytes read before the stall | rows | share |
+|---|---|---|
+| under 8 KiB | 217 | 7.1 % |
+| 8 to 20 KiB | 50 | 1.6 % |
+| **20 to 32 KiB** | **2 217** | **72.8 %** |
+| 32 to 64 KiB | 556 | 18.3 % |
+| over 64 KiB | 4 | 0.1 % |
+
+Median 29.7 KiB. The Dutch control read the same rows to a median of 56 KiB, so the
+responses were longer than that; 2 686 of the stalls had already received a 200 status
+line. 304 distinct targets, 89 % of them on the global list. The Moscow hosting probe
+has 144 such rows in the same window and 97 % of them stop under 8 KiB, which is a
+different shape entirely. So the residential line does not lose these connections at
+random: they are cut inside a narrow band once roughly 20 to 32 KiB have been received,
+which is the behaviour reported on ntc.party as "the 16 KB cut", here measured with a
+control and a number. What decides which sites get it is the next question; the
+target set is in the data.
+
 One more series from the same days, because 8.4 stated it as absolute: the `own` rows
 from the Moscow probe to the responder, every fifteen minutes. Successful dials per
 day: 0 of 88 (09-04), **46 of 740 (09-05)**, 0 of 800, 0 of 800, 0 of 796, 1 of 392
