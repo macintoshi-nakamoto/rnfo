@@ -105,7 +105,7 @@ from the AS200823 node, which is the contrast that settles it.
 
 Both: plugged in permanently, nothing installed but Termux, Termux:Boot and Termux:API
 from **F-Droid** (the Play Store builds are dead). **No VPN app on either phone**,
-ever - the vantage point rule (docs/METHODOLOGY.md §5).
+ever - see METHODOLOGY.md §7, vantage point independence.
 
 **Bootstrap, once, by hand in Termux on the phone:**
 

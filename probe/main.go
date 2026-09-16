@@ -128,7 +128,7 @@ func main() {
 	case *whoami:
 		// Commissioning check. A probe whose traffic leaves through the
 		// operator's own tunnel measures the tunnel, not the network it is
-		// supposed to represent (the vantage point rule (docs/METHODOLOGY.md §5)), and the only way to
+		// supposed to represent (see docs/METHODOLOGY.md §7), and the only way to
 		// know is to ask the outside what address is talking to it.
 		id, _, _ := identity.Resolve(ctx, cfg.stateDir)
 		fmt.Printf("asn=%s\ncountry=%s\nregion=%s\ncity=%s\n", id.ASN, id.Country, id.Region, id.City)

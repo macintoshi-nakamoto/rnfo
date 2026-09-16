@@ -172,7 +172,7 @@ def main():
     print(f"==> phone egress as seen from outside: {egress[:200]}")
     if "AS200823" in egress:
         raise SystemExit("the phone's traffic leaves through the owner's own AS200823 node - it is inside the "
-                         "tunnel. the vantage point rule (docs/METHODOLOGY.md §5): fix the routing first, then deploy.")
+                         "tunnel. A probe there measures the tunnel, not the network: fix the routing first, then deploy.")
 
     binary = build(goarch)
     upload_binary(c, binary)

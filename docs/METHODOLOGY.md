@@ -371,7 +371,7 @@ A test from the owner's workstation looked as if it settled it - the Frankfurt h
 answered - until the workstation's egress was checked: it leaves through the owner's
 own tunnel and exits at an AS200823 node. That result was a measurement of AS200823,
 not of Russia, and it is discarded. It is also the cleanest illustration available of
-the vantage point rule (docs/METHODOLOGY.md §5).
+the vantage point rule of §7.
 
 Consequence for the design: `de-fra-vps` is a valid control for the international list
 and a subject, not a control, for Russian-hosted targets. `nl-lim-panel` remains the
