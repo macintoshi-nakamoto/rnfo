@@ -74,11 +74,17 @@ them stop under 8 KiB, which is a different shape entirely.
 This is the behaviour described on ntc.party as "the 16 KB cut", here with a control and
 a distribution rather than an anecdote.
 
-**Caveats that belong next to the numbers.** One household on one operator. The
-residential figures are not confirmed by a second attempt; the hosting ones are, and
-95.5 % of 8,940 retried failures failed again. Twelve days is not a season. Full
-discussion, including an early claim that turned out to be wrong and how it was
-corrected, in [`docs/METHODOLOGY.md`](docs/METHODOLOGY.md) §8.
+**How solid these numbers are.** Every failure on both Russian probes is measured again
+three seconds later. From 2026-09-09, once the retry guard was fixed, 100 % of failures
+were retried and the failure reproduced in **96.3 %** of 32,764 residential cases and
+96.0 % of 25,592 hosting cases. So these are not one-off observations.
+
+**Caveats that belong next to the numbers.** One household on one operator, so the
+residential line is n=1 and cannot speak for Russian broadband in general. Twelve days is
+not a season. Between 2026-09-05 and 2026-09-08 the residential probe recorded no retries
+at all, because the guard then in use fired on any run losing more than 40 % of the list,
+which is that probe's ordinary day. Full discussion, including that mistake and how it was
+found, in [`docs/METHODOLOGY.md`](docs/METHODOLOGY.md) §8.
 
 Every figure above is drawn straight from the sealed day files by
 [`analysis/figures.py`](analysis/figures.py); run it and you get the same pictures.
@@ -202,8 +208,10 @@ probes.yaml     the probe registry; a row with an unregistered probe id is inval
 
 Listed here rather than in an appendix, because they bound what the data can support.
 
-1. **The residential numbers are not confirmed by a second attempt.** The retry is gated
-   on the connectivity controls and currently runs on the hosting probe only.
+1. **One residential vantage point, one household, one operator.** Everything the first
+   finding says about subscriber networks rests on a single line in a single flat. A
+   second household on a different operator is the cheapest way to make it an argument
+   rather than an observation.
 2. **The AS comparison has a sample size of two**, and the second foreign host shares an
    upstream with the Russian probe. Its failures toward Russian destinations (9.3 % of the
    list) make it a subject rather than a control for those targets.

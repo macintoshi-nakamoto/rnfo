@@ -524,6 +524,43 @@ succeeded on retry are the transient share, and they are the reason the retry ex
 
 ---
 
+### 8.6 Twelve sealed days, 2026-09-04 to 2026-09-15, with the retry working
+
+Section 8.5 covered three days during which the residential probe recorded no confirmation
+retries at all. The guard has been fixed since (4.3), so this is the first window in which
+every Russian failure is confirmed or refused by a second attempt.
+
+| Subject vs `nl-lim-panel` | Paired first attempts | Failed from subject only |
+|---|---|---|
+| `ru-mow-home` (residential, AS8402) | 118 608 | **42 195 (35.6 %)** |
+| `ru-msk-vps` (hosting, AS203273) | 127 080 | **33 759 (26.6 %)** |
+| `de-fra-vps` (Frankfurt, AS210644) | 127 080 | 11 852 (9.3 %) |
+
+Day by day the three series are flat: the residential share sits between 35.0 % and 36.8 %,
+hosting between 26.1 % and 26.9 %, Frankfurt between 9.2 % and 9.9 %. The nine-point gap of
+8.3 and 8.5 is therefore not an artefact of the slot or the week; it is the standing
+difference between what a datacentre uplink and a subscriber line see of the same list.
+
+Confirmation, from 2026-09-09 onward, first attempts that failed and were retried three
+seconds later:
+
+| Probe | Failures | Retried | Reproduced |
+|---|---|---|---|
+| `ru-mow-home` | 32 764 | 32 764 (100 %) | **31 537 (96.3 %)** |
+| `ru-msk-vps` | 25 592 | 25 592 (100 %) | **24 563 (96.0 %)** |
+
+The two probes agree to within a third of a point on how much of what they see is
+transient, which is worth stating because they disagree by nine points on how much they
+see. The difference is in the volume of filtering, not in its stability.
+
+Stalls, the mechanism of 8.5, over the same twelve days: 9 115 residential
+`response_timeout` rows that the Dutch control read successfully, 73 % of them stopping
+between 20 and 32 KiB. The hosting probe has 407 comparable rows and 94 % of them stop
+under 8 KiB. Both figures are drawn by `analysis/figures.py` directly from the sealed
+files.
+
+---
+
 ## 9. Load and politeness
 
 The `full` profile covers 2 824 unique URLs: the pinned Citizen Lab `global` and `ru`
