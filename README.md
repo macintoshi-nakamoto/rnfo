@@ -72,7 +72,20 @@ them stop under 8 KiB, which is a different shape entirely.
 </picture>
 
 This is the behaviour described on ntc.party as "the 16 KB cut", here with a control and
-a distribution rather than an anecdote.
+a distribution rather than an anecdote. It is also not a size rule. Among targets whose
+response is 32 KiB or larger, only 16 % stall consistently and the other 84 % deliver the
+same volume intact; a stalling target, however, stalls on **100 %** of the days it is
+measured, and the failure rate does not move across the day, so it is neither random nor
+congestion. Size decides where the connection dies, around 20 to 32 KiB. A host set decides
+whether it dies at all.
+
+That host set is not the set that is blocked outright. News is the most filtered category
+on this line and the least likely to stall, because 48 % of it is already dropped during
+the TLS handshake and never reaches a body. Religion is the mirror image: 79 % succeeds,
+4 % is dropped at the handshake, and 13 % is stalled mid-response. The stall is a second
+treatment applied to a partly different set, and the hosting probe sees it in 0.3 % of the
+same rows. Worked through in [`docs/METHODOLOGY.md`](docs/METHODOLOGY.md) §8.7, computed by
+[`analysis/stalls.py`](analysis/stalls.py).
 
 **How solid these numbers are.** Every failure on both Russian probes is measured again
 three seconds later. From 2026-09-09, once the retry guard was fixed, 100 % of failures

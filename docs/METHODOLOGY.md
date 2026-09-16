@@ -561,6 +561,81 @@ files.
 
 ---
 
+### 8.7 The stall is a second treatment, not a slower version of the first
+
+Section 8.5 measured where residential stalls stop. This section asks what decides which
+connections get one, using the twelve sealed days and nothing but the control pairing.
+The script is `analysis/stalls.py`.
+
+**It does not follow the clock.** Congestion on a subscriber line has a daily rhythm; the
+18:00Z slot is 21:00 in Moscow, the busiest hour of the residential evening.
+
+| Slot | Residential: measured | failed | stalled | Hosting: failed | stalled |
+|---|---|---|---|---|---|
+| 00Z | 26 550 | 37.8 % | 8.2 % | 28.1 % | 0.3 % |
+| 06Z | 26 562 | 38.0 % | 8.0 % | 28.4 % | 0.3 % |
+| 12Z | 29 203 | 37.7 % | 8.3 % | 28.2 % | 0.3 % |
+| 18Z | 29 211 | 37.8 % | 8.2 % | 28.3 % | 0.4 % |
+
+The spread across the day is under half a point on both probes. Whatever cuts these
+connections does not care what time it is, which is the first thing congestion would.
+
+**It does follow the target.** 356 targets stalled at least once. Of those, 66 % stalled
+on three quarters or more of the days they were measured, and the median stalling target
+stalls on **100 %** of the days it is measured. Congestion picks whatever is in flight at a
+bad moment; this picks the same hosts every day.
+
+**Size matters, but does not decide.** Responses the residential line lost are large: 86 %
+of them were 32 KiB or larger as read by the control, against 37 % of the responses that
+arrived whole. But among the 1 145 targets whose response is 32 KiB or larger, only 178
+(16 %) stall consistently; the other 84 % deliver the same volume intact. Among targets
+under 32 KiB, 2 % stall. So a large response is roughly eight times more likely to be cut,
+and the great majority of large responses are not cut at all. Size decides *where* the
+connection dies, near 20 to 32 KiB; it does not decide *whether*.
+
+**What it does follow is a set of hosts, and it is not the set that is blocked outright.**
+Comparing the 204 consistently stalling targets against the category composition of the
+list itself, restricted to large responses so that size is held roughly constant:
+
+| Category | Large targets | Stalling | Share | Versus base rate |
+|---|---|---|---|---|
+| XED | 24 | 11 | 45.8 % | 2.9x |
+| ENV | 32 | 10 | 31.2 % | 2.0x |
+| LGBT | 41 | 12 | 29.3 % | 1.9x |
+| HUMR | 96 | 24 | 25.0 % | 1.6x |
+| REL | 44 | 10 | 22.7 % | 1.5x |
+| NEWS | 381 | 33 | 8.7 % | **0.6x** |
+| ANON | 61 | 7 | 11.5 % | **0.7x** |
+
+News is the most heavily filtered category on this line overall and the *least* likely to
+stall. The reason is visible in the mechanism split per category, over all paired rows:
+
+| Category | Paired | ok | `tls_timeout` | `response_timeout` |
+|---|---|---|---|---|
+| NEWS | 28 085 | 45 % | **48 %** | 5.9 % |
+| GRP | 3 934 | 55 % | 34 % | 6.6 % |
+| ANON | 8 416 | 62 % | 31 % | 3.8 % |
+| LGBT | 3 924 | 50 % | 33 % | 13.4 % |
+| HUMR | 9 287 | 63 % | 17 % | **16.4 %** |
+| REL | 3 651 | 79 % | **4 %** | **13.4 %** |
+
+A host that is dropped during the TLS handshake never reaches a body to stall in. News is
+taken by the first mechanism, so it barely appears in the second. Religion is the clean
+case in the other direction: 79 % of its measurements succeed and only 4 % are dropped at
+the handshake, yet 13.4 % are stalled mid-response. The stall is therefore not a weaker
+form of the outright block applied to the same hosts. It is a second treatment, applied to
+a partly different set, and the residential line is the only vantage point in this project
+that sees it at all: the same rows from the Moscow hosting probe stall 0.3 % of the time.
+
+What this does not establish. One household on one operator, so the host set observed here
+may be specific to that operator's equipment rather than national. The per-category
+enrichments rest on small numbers, 11 targets for XED and 10 for ENV, and should be read as
+a direction rather than a measurement. Neither mechanism is attributed to a particular
+device or vendor: this section describes behaviour observed at the endpoints, and the
+project holds no data about what sits in between.
+
+---
+
 ## 9. Load and politeness
 
 The `full` profile covers 2 824 unique URLs: the pinned Citizen Lab `global` and `ru`
