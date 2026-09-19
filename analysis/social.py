@@ -131,7 +131,7 @@ def main():
 
     ax.text(field_x0, 5.0, "github.com/macintoshi-nakamoto/rnfo",
             color=MUTED, fontsize=11.5, va="center", alpha=0.75)
-    ax.text(94.0, 5.0, "four vantage points  ·  twelve sealed days  ·  MIT + CC BY 4.0",
+    ax.text(94.0, 5.0, "four vantage points  ·  sealed daily  ·  MIT + CC BY 4.0",
             color=MUTED, fontsize=11.5, va="center", ha="right", alpha=0.6)
 
     os.makedirs(os.path.dirname(OUT), exist_ok=True)

@@ -524,7 +524,7 @@ succeeded on retry are the transient share, and they are the reason the retry ex
 
 ---
 
-### 8.6 Twelve sealed days, 2026-09-04 to 2026-09-15, with the retry working
+### 8.6 Fifteen sealed days, 2026-09-04 to 2026-09-18, with the retry working
 
 Section 8.5 covered three days during which the residential probe recorded no confirmation
 retries at all. The guard has been fixed since (4.3), so this is the first window in which
@@ -532,12 +532,12 @@ every Russian failure is confirmed or refused by a second attempt.
 
 | Subject vs `nl-lim-panel` | Paired first attempts | Failed from subject only |
 |---|---|---|
-| `ru-mow-home` (residential, AS8402) | 118 608 | **42 195 (35.6 %)** |
-| `ru-msk-vps` (hosting, AS203273) | 127 080 | **33 759 (26.6 %)** |
-| `de-fra-vps` (Frankfurt, AS210644) | 127 080 | 11 852 (9.3 %) |
+| `ru-mow-home` (residential, AS8402) | 152 496 | **54 349 (35.6 %)** |
+| `ru-msk-vps` (hosting, AS203273) | 160 968 | **42 869 (26.6 %)** |
+| `de-fra-vps` (Frankfurt, AS210644) | 160 968 | 15 027 (9.3 %) |
 
 Day by day the three series are flat: the residential share sits between 35.0 % and 36.8 %,
-hosting between 26.1 % and 26.9 %, Frankfurt between 9.2 % and 9.9 %. The nine-point gap of
+hosting between 26.1 % and 27.0 %, Frankfurt between 9.2 % and 9.9 %. The nine-point gap of
 8.3 and 8.5 is therefore not an artefact of the slot or the week; it is the standing
 difference between what a datacentre uplink and a subscriber line see of the same list.
 
@@ -546,16 +546,16 @@ seconds later:
 
 | Probe | Failures | Retried | Reproduced |
 |---|---|---|---|
-| `ru-mow-home` | 32 764 | 32 764 (100 %) | **31 537 (96.3 %)** |
-| `ru-msk-vps` | 25 592 | 25 592 (100 %) | **24 563 (96.0 %)** |
+| `ru-mow-home` | 46 038 | 46 038 (100 %) | **44 262 (96.1 %)** |
+| `ru-msk-vps` | 35 912 | 35 912 (100 %) | **34 479 (96.0 %)** |
 
-The two probes agree to within a third of a point on how much of what they see is
+The two probes agree to within a tenth of a point on how much of what they see is
 transient, which is worth stating because they disagree by nine points on how much they
 see. The difference is in the volume of filtering, not in its stability.
 
-Stalls, the mechanism of 8.5, over the same twelve days: 9 115 residential
+Stalls, the mechanism of 8.5, over the same fifteen days: 11 692 residential
 `response_timeout` rows that the Dutch control read successfully, 73 % of them stopping
-between 20 and 32 KiB. The hosting probe has 407 comparable rows and 94 % of them stop
+between 20 and 32 KiB. The hosting probe has 516 comparable rows and 94 % of them stop
 under 8 KiB. Both figures are drawn by `analysis/figures.py` directly from the sealed
 files.
 
@@ -564,7 +564,7 @@ files.
 ### 8.7 The stall is a second treatment, not a slower version of the first
 
 Section 8.5 measured where residential stalls stop. This section asks what decides which
-connections get one, using the twelve sealed days and nothing but the control pairing.
+connections get one, using the fifteen sealed days and nothing but the control pairing.
 The script is `analysis/stalls.py`.
 
 **It does not follow the clock.** Congestion on a subscriber line has a daily rhythm; the
@@ -572,57 +572,58 @@ The script is `analysis/stalls.py`.
 
 | Slot | Residential: measured | failed | stalled | Hosting: failed | stalled |
 |---|---|---|---|---|---|
-| 00Z | 26 550 | 37.8 % | 8.2 % | 28.1 % | 0.3 % |
-| 06Z | 26 562 | 38.0 % | 8.0 % | 28.4 % | 0.3 % |
-| 12Z | 29 203 | 37.7 % | 8.3 % | 28.2 % | 0.3 % |
-| 18Z | 29 211 | 37.8 % | 8.2 % | 28.3 % | 0.4 % |
+| 00Z | 34 519 | 37.8 % | 8.2 % | 28.2 % | 0.3 % |
+| 06Z | 34 526 | 37.9 % | 8.0 % | 28.4 % | 0.3 % |
+| 12Z | 37 174 | 37.7 % | 8.3 % | 28.3 % | 0.3 % |
+| 18Z | 37 178 | 38.2 % | 8.2 % | 28.4 % | 0.4 % |
 
 The spread across the day is under half a point on both probes. Whatever cuts these
 connections does not care what time it is, which is the first thing congestion would.
 
-**It does follow the target.** 356 targets stalled at least once. Of those, 66 % stalled
+**It does follow the target.** 369 targets stalled at least once. Of those, 66 % stalled
 on three quarters or more of the days they were measured, and the median stalling target
 stalls on **100 %** of the days it is measured. Congestion picks whatever is in flight at a
 bad moment; this picks the same hosts every day.
 
 **Size matters, but does not decide.** Responses the residential line lost are large: 86 %
 of them were 32 KiB or larger as read by the control, against 37 % of the responses that
-arrived whole. But among the 1 145 targets whose response is 32 KiB or larger, only 178
-(16 %) stall consistently; the other 84 % deliver the same volume intact. Among targets
+arrived whole. But among the 1 149 targets whose response is 32 KiB or larger, only 211
+(18 %) stall consistently; the other 82 % deliver the same volume intact. Among targets
 under 32 KiB, 2 % stall. So a large response is roughly eight times more likely to be cut,
 and the great majority of large responses are not cut at all. Size decides *where* the
 connection dies, near 20 to 32 KiB; it does not decide *whether*.
 
 **What it does follow is a set of hosts, and it is not the set that is blocked outright.**
-Comparing the 204 consistently stalling targets against the category composition of the
-list itself, restricted to large responses so that size is held roughly constant:
+Comparing the 211 consistently stalling targets against the category composition of the
+list itself, restricted to large responses so that size is held roughly constant. The base
+rate among large targets is 18.4 %:
 
 | Category | Large targets | Stalling | Share | Versus base rate |
 |---|---|---|---|---|
-| XED | 24 | 11 | 45.8 % | 2.9x |
-| ENV | 32 | 10 | 31.2 % | 2.0x |
-| LGBT | 41 | 12 | 29.3 % | 1.9x |
-| HUMR | 96 | 24 | 25.0 % | 1.6x |
-| REL | 44 | 10 | 22.7 % | 1.5x |
-| NEWS | 381 | 33 | 8.7 % | **0.6x** |
-| ANON | 61 | 7 | 11.5 % | **0.7x** |
+| XED | 24 | 11 | 45.8 % | 2.5x |
+| ENV | 32 | 11 | 34.4 % | 1.9x |
+| HUMR | 95 | 31 | 32.6 % | 1.8x |
+| REL | 45 | 14 | 31.1 % | 1.7x |
+| LGBT | 41 | 12 | 29.3 % | 1.6x |
+| ANON | 61 | 7 | 11.5 % | **0.6x** |
+| NEWS | 382 | 40 | 10.5 % | **0.6x** |
 
 News is the most heavily filtered category on this line overall and the *least* likely to
 stall. The reason is visible in the mechanism split per category, over all paired rows:
 
 | Category | Paired | ok | `tls_timeout` | `response_timeout` |
 |---|---|---|---|---|
-| NEWS | 28 085 | 45 % | **48 %** | 5.9 % |
-| GRP | 3 934 | 55 % | 34 % | 6.6 % |
-| ANON | 8 416 | 62 % | 31 % | 3.8 % |
-| LGBT | 3 924 | 50 % | 33 % | 13.4 % |
-| HUMR | 9 287 | 63 % | 17 % | **16.4 %** |
-| REL | 3 651 | 79 % | **4 %** | **13.4 %** |
+| NEWS | 36 108 | 45 % | **48 %** | 5.8 % |
+| GRP | 5 058 | 55 % | 34 % | 6.7 % |
+| ANON | 10 812 | 62 % | 31 % | 3.8 % |
+| LGBT | 5 039 | 50 % | 34 % | 13.4 % |
+| HUMR | 11 959 | 63 % | 17 % | **16.2 %** |
+| REL | 4 693 | 79 % | **4 %** | **13.7 %** |
 
 A host that is dropped during the TLS handshake never reaches a body to stall in. News is
 taken by the first mechanism, so it barely appears in the second. Religion is the clean
 case in the other direction: 79 % of its measurements succeed and only 4 % are dropped at
-the handshake, yet 13.4 % are stalled mid-response. The stall is therefore not a weaker
+the handshake, yet 13.7 % are stalled mid-response. The stall is therefore not a weaker
 form of the outright block applied to the same hosts. It is a second treatment, applied to
 a partly different set, and the residential line is the only vantage point in this project
 that sees it at all: the same rows from the Moscow hosting probe stall 0.3 % of the time.

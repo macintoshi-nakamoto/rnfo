@@ -42,7 +42,7 @@ a Russian measurement and its foreign control share a `run_id` and join on `(run
 Every remote measurement platform observes from datacentres. Russian filtering equipment
 sits mainly at operators serving subscribers, so that choice is not neutral: against the
 same foreign control, in the same slots, a Moscow home line loses about nine points more
-of the test list than a Moscow VPS does, and the gap has not moved in twelve days.
+of the test list than a Moscow VPS does, and the gap has not moved in fifteen days.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/img/gap-dark.png">
@@ -61,9 +61,9 @@ line arrives, and the response stalls.
 
 ### Those residential stalls stop inside a narrow band
 
-`bytes_read` counts wire bytes received before the connection went silent. For the 9,115
+`bytes_read` counts wire bytes received before the connection went silent. For the 11,692
 stalls the residential probe lost while the Dutch control read the same responses fine,
-73 % stop between 20 and 32 KiB. The hosting probe has 407 comparable rows and 94 % of
+73 % stop between 20 and 32 KiB. The hosting probe has 516 comparable rows and 94 % of
 them stop under 8 KiB, which is a different shape entirely.
 
 <picture>
@@ -72,9 +72,9 @@ them stop under 8 KiB, which is a different shape entirely.
 </picture>
 
 This is the behaviour described on ntc.party as "the 16 KB cut", here with a control and
-a distribution rather than an anecdote. It is also not a size rule. Among targets whose
-response is 32 KiB or larger, only 16 % stall consistently and the other 84 % deliver the
-same volume intact; a stalling target, however, stalls on **100 %** of the days it is
+a distribution rather than an anecdote. It is also not a size rule. Among the 1,149 targets
+whose response is 32 KiB or larger, only 18 % stall consistently and the other 82 % deliver
+the same volume intact; a stalling target, however, stalls on **100 %** of the days it is
 measured, and the failure rate does not move across the day, so it is neither random nor
 congestion. Size decides where the connection dies, around 20 to 32 KiB. A host set decides
 whether it dies at all.
@@ -82,18 +82,18 @@ whether it dies at all.
 That host set is not the set that is blocked outright. News is the most filtered category
 on this line and the least likely to stall, because 48 % of it is already dropped during
 the TLS handshake and never reaches a body. Religion is the mirror image: 79 % succeeds,
-4 % is dropped at the handshake, and 13 % is stalled mid-response. The stall is a second
+4 % is dropped at the handshake, and 14 % is stalled mid-response. The stall is a second
 treatment applied to a partly different set, and the hosting probe sees it in 0.3 % of the
 same rows. Worked through in [`docs/METHODOLOGY.md`](docs/METHODOLOGY.md) §8.7, computed by
 [`analysis/stalls.py`](analysis/stalls.py).
 
 **How solid these numbers are.** Every failure on both Russian probes is measured again
 three seconds later. From 2026-09-09, once the retry guard was fixed, 100 % of failures
-were retried and the failure reproduced in **96.3 %** of 32,764 residential cases and
-96.0 % of 25,592 hosting cases. So these are not one-off observations.
+were retried and the failure reproduced in **96.1 %** of 46,038 residential cases and
+96.0 % of 35,912 hosting cases. So these are not one-off observations.
 
 **Caveats that belong next to the numbers.** One household on one operator, so the
-residential line is n=1 and cannot speak for Russian broadband in general. Twelve days is
+residential line is n=1 and cannot speak for Russian broadband in general. Fifteen days is
 not a season. Between 2026-09-05 and 2026-09-08 the residential probe recorded no retries
 at all, because the guard then in use fired on any run losing more than 40 % of the list,
 which is that probe's ordinary day. Full discussion, including that mistake and how it was

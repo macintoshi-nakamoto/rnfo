@@ -9,6 +9,8 @@ sealed day files:
      bad moment; a filter hits the same hosts every day.
   3. Does it follow the size of the response? If short responses arrive whole and
      long ones are cut at the same place, the trigger is length, not identity.
+  4. Does it follow the category, or is that just what the list is made of? Raw
+     counts follow the list; only a share against the base rate says anything.
 
     python analysis/stalls.py
 """
@@ -49,6 +51,9 @@ def main():
     stall_ctrl_bytes = []
     ok_ctrl_bytes = []
     stall_bytes = []
+    ctrl_sizes = collections.defaultdict(list)
+    category = {}
+    split = collections.defaultdict(collections.Counter)
 
     for probe in (HOME, HOST):
         for row in read_rows(probe):
@@ -68,6 +73,12 @@ def main():
 
             if probe != HOME:
                 continue
+            cat = row.get("category") or "NONE"
+            category[row["url"]] = cat
+            split[cat]["paired"] += 1
+            split[cat][verdict] += 1
+            if peer[0] == "ok":
+                ctrl_sizes[row["url"]].append(peer[1])
             seen_days[row["url"]].add(day)
             if verdict == "response_timeout":
                 stall_days[row["url"]].add(day)
@@ -139,6 +150,52 @@ def main():
         print("     stall rate among large responses: %.1f%%"
               % (100 * big_stall / (big_ok + big_stall)))
     print("   responses smaller than 32 KiB that stalled anyway: %d" % small_stall)
+    print()
+
+    print("4. Does it follow the category, or is that just the list?\n")
+
+    def median(values):
+        values = sorted(values)
+        return values[len(values) // 2] if values else 0
+
+    big = set()
+    for url, sizes in ctrl_sizes.items():
+        if median(sizes) / 1024.0 >= 32:
+            big.add(url)
+    steady = set()
+    for url, days in stall_days.items():
+        if len(days) / float(len(seen_days[url])) >= 0.75:
+            steady.add(url)
+    base = len(big & steady) / float(len(big) or 1)
+    small = set(ctrl_sizes) - big
+    print("   %d targets answer the control with 32 KiB or more, %d of them stall on"
+          % (len(big), len(big & steady)))
+    print("   three quarters of their days or more, so the base rate is %.1f%%." % (100 * base))
+    print("   of the %d targets under 32 KiB, %d stall that steadily, %.1f%%\n"
+          % (len(small), len(small & steady), 100 * len(small & steady) / float(len(small) or 1)))
+    print("   %-9s %10s %10s %8s %10s" % ("category", "large", "stalling", "share", "vs base"))
+    rows = []
+    for cat in {category[u] for u in big}:
+        here = [u for u in big if category[u] == cat]
+        hit = [u for u in here if u in steady]
+        if len(here) < 10:
+            continue
+        share = len(hit) / float(len(here))
+        rows.append((share / base if base else 0, cat, len(here), len(hit), share))
+    for ratio, cat, n, hit, share in sorted(rows, reverse=True):
+        print("   %-9s %10d %10d %7.1f%% %9.1fx" % (cat, n, hit, 100 * share, ratio))
+    print()
+
+    print("   where each category dies, over every paired row on the home line\n")
+    print("   %-9s %10s %8s %14s %18s" % ("category", "paired", "ok", "tls_timeout", "response_timeout"))
+    for cat, counts in sorted(split.items(), key=lambda kv: -kv[1]["paired"]):
+        paired = counts["paired"]
+        if paired < 500:
+            continue
+        print("   %-9s %10d %7.0f%% %13.0f%% %17.1f%%"
+              % (cat, paired, 100 * counts["ok"] / paired,
+                 100 * counts["tls_timeout"] / paired,
+                 100 * counts["response_timeout"] / paired))
 
 
 if __name__ == "__main__":
